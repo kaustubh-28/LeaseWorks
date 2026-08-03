@@ -91,3 +91,75 @@ export async function deleteBuilding(id: string, user?: UserSession) {
     where: { id }
   });
 }
+
+export async function getLandlordPortfolio(userId: string) {
+  const buildings = await prisma.building.findMany({
+    where: { userId },
+    include: {
+      address: true,
+      apartments: {
+        include: {
+          leases: {
+            include: { tenant: true }
+          },
+          payments: true,
+          meters: true,
+          costs: true
+        }
+      },
+      costs: true,
+      meters: true
+    }
+  });
+
+  const maintenanceRequests = await prisma.maintenanceRequest.findMany({
+    where: {
+      apartment: {
+        building: { userId }
+      }
+    },
+    include: {
+      apartment: true,
+      tenant: true
+    }
+  });
+
+  return {
+    buildings,
+    maintenanceRequests
+  };
+}
+
+export async function getBuildingDetail(id: string, user?: UserSession) {
+  const building = await prisma.building.findUnique({
+    where: { id },
+    include: {
+      address: true,
+      costs: true,
+      meters: true,
+      apartments: {
+        include: {
+          leases: {
+            include: { tenant: true },
+            orderBy: { startDate: 'desc' }
+          },
+          payments: {
+            orderBy: { dueDate: 'desc' }
+          },
+          costs: true,
+          meters: true
+        }
+      }
+    }
+  });
+
+  if (!building) {
+    throw new NotFoundError(`Building with ID ${id} not found`);
+  }
+
+  if (user && !canViewBuilding(user, building.userId)) {
+    throw new AuthorizationError('You do not have access to view this building');
+  }
+
+  return building;
+}
