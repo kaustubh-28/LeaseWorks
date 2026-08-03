@@ -4,7 +4,7 @@ This document provides a comprehensive overview of the tech stack, codebase arch
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 1. **Framework**: **SvelteKit** (using Svelte 5 and Vite)
 2. **Styling**: **Tailwind CSS v4** (packaged natively inside the Vite compilation pipeline)
@@ -14,7 +14,7 @@ This document provides a comprehensive overview of the tech stack, codebase arch
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 ├── prisma/
@@ -46,7 +46,7 @@ This document provides a comprehensive overview of the tech stack, codebase arch
 
 ---
 
-## 🔐 Authentication & Session Lifecycle
+## Authentication & Session Lifecycle
 
 The application enforces a cookie-based session pattern secured by token verification.
 
@@ -104,7 +104,7 @@ sequenceDiagram
 
 ---
 
-## 🗄️ Database Schema Overview (SQLite / Prisma)
+## Database Schema Overview (SQLite / Prisma)
 
 The database schema manages relationship models for property administration.
 
@@ -141,7 +141,7 @@ erDiagram
 
 ---
 
-## 🗺️ Route Hierarchy
+## Route Hierarchy
 
 SvelteKit's file-based router manages pages and API boundaries:
 
@@ -161,7 +161,7 @@ SvelteKit's file-based router manages pages and API boundaries:
 
 ---
 
-## 🏗️ Component Architecture
+## Component Architecture
 
 The codebase utilizes a metadata-driven architecture to keep files clean and DRY:
 
@@ -172,22 +172,22 @@ The codebase utilizes a metadata-driven architecture to keep files clean and DRY
                   └──────────┬───────────┘
                              │
                              ▼
-┌─────────────────────────────────────────────────────────┐
-│                 EntityList.svelte                       │
-│  (Renders Table, Handles Search, Loads Collection Feed) │
-└────────────────────────────┬────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                 EntityForm.svelte                       │
-│  (Compiles Inputs, Validates Fields, Resolves FK Refs)  │
-└────────────────────────────┬────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                 REST Controller Endpoint                │
-│  (Performs DB mutations via Prisma & SQL Client)        │
-└─────────────────────────────────────────────────────────┘
+ ┌─────────────────────────────────────────────────────────┐
+ │                 EntityList.svelte                       │
+ │  (Renders Table, Handles Search, Loads Collection Feed) │
+ └────────────────────────────┬────────────────────────────┘
+                              │
+                              ▼
+ ┌─────────────────────────────────────────────────────────┐
+ │                 EntityForm.svelte                       │
+ │  (Compiles Inputs, Validates Fields, Resolves FK Refs)  │
+ └────────────────────────────┬────────────────────────────┘
+                              │
+                              ▼
+ ┌─────────────────────────────────────────────────────────┐
+ │                 REST Controller Endpoint                │
+ │  (Performs DB mutations via Prisma & SQL Client)        │
+ └─────────────────────────────────────────────────────────┘
 ```
 
 1. **FormFieldSchema (`src/lib/entities.ts`)**:
@@ -203,7 +203,7 @@ The codebase utilizes a metadata-driven architecture to keep files clean and DRY
 
 ---
 
-## 📊 State Management Philosophy
+## State Management Philosophy
 
 - **Server-Side Page Loaders**: Critical dashboards fetch data using `+page.server.ts` scripts directly through Prisma on the server side for immediate loading and SSR benefits.
 - **Client-Side CRUD Fetching**: Administrative entity lists load collections asynchronously inside Svelte's `onMount` lifecycle method via `/api/<entity>` endpoints.
@@ -212,7 +212,7 @@ The codebase utilizes a metadata-driven architecture to keep files clean and DRY
 
 ---
 
-## 🎨 Design Rules (Lease Works)
+## Design Rules (Lease Works)
 
 Any changes to the UI must adhere strictly to the editorial "Lease Works" aesthetic:
 
@@ -226,7 +226,7 @@ Any changes to the UI must adhere strictly to the editorial "Lease Works" aesthe
 
 ---
 
-## ⚠️ Known Technical Debt & Constraints
+## Known Technical Debt & Constraints
 
 1. **Static Development Demo Flag**: The `hooks.server.ts` script contains a hardcoded `DEMO_MODE = true` fallback. This bypasses authentication verification and automatically logs in a landlord profile if cookies are absent. This must be disabled/removed for production environments.
 2. **Client-Side Fetch Overhead**: Administrative tables load collections via Svelte `onMount` client-side API requests instead of using server load scripts, which causes minor layout shifts on page entry.
@@ -235,7 +235,7 @@ Any changes to the UI must adhere strictly to the editorial "Lease Works" aesthe
 
 ---
 
-## 🚀 Next Implementation Priorities
+## Next Implementation Priorities
 
 1. **Tenant Utility Billing & Reporting**: Build interactive UI grids displaying past utility costs and water/electricity usage trackers using SVG/CSS chart structures.
 2. **Dynamic Invoicing Generator**: Construct automated PDF invoice templates matching the double-ledger aesthetic for lease agreements and monthly payments.
@@ -244,7 +244,7 @@ Any changes to the UI must adhere strictly to the editorial "Lease Works" aesthe
 
 ---
 
-## 📐 Coding Conventions
+## Coding Conventions
 
 - **Prisma Garbage Collection**: To prevent connection leak timeouts, every API controller querying the database must close database channels using a `finally` block:
   ```typescript
