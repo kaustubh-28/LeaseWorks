@@ -1,5 +1,6 @@
 import prisma from '../prisma';
-import { NotFoundError } from '../errors';
+import { NotFoundError, AuthorizationError } from '../errors';
+import { type UserSession, canManageTenant, canViewTenant } from '../auth/policies';
 
 export async function getAllTenants() {
   return prisma.tenant.findMany({
@@ -7,7 +8,7 @@ export async function getAllTenants() {
   });
 }
 
-export async function getTenantById(id: string) {
+export async function getTenantById(id: string, user?: UserSession) {
   const tenant = await prisma.tenant.findUnique({
     where: { id },
     include: {
@@ -31,10 +32,18 @@ export async function getTenantById(id: string) {
     throw new NotFoundError(`Tenant with ID ${id} not found`);
   }
 
+  if (user && !canViewTenant(user, tenant.id)) {
+    throw new AuthorizationError('You do not have access to view this tenant');
+  }
+
   return tenant;
 }
 
-export async function createTenant(data: any) {
+export async function createTenant(data: any, user?: UserSession) {
+  if (user && !canManageTenant(user)) {
+    throw new AuthorizationError('Only landlords can manage tenants');
+  }
+
   const { addressId, ...rest } = data;
   const payload: any = { ...rest };
 
@@ -48,8 +57,12 @@ export async function createTenant(data: any) {
   });
 }
 
-export async function updateTenant(id: string, data: any) {
-  await getTenantById(id);
+export async function updateTenant(id: string, data: any, user?: UserSession) {
+  await getTenantById(id, user);
+
+  if (user && !canManageTenant(user)) {
+    throw new AuthorizationError('Only landlords can manage tenants');
+  }
 
   const { addressId, ...rest } = data;
   const payload: any = { ...rest };
@@ -67,8 +80,12 @@ export async function updateTenant(id: string, data: any) {
   });
 }
 
-export async function deleteTenant(id: string) {
-  await getTenantById(id);
+export async function deleteTenant(id: string, user?: UserSession) {
+  await getTenantById(id, user);
+
+  if (user && !canManageTenant(user)) {
+    throw new AuthorizationError('Only landlords can manage tenants');
+  }
 
   return prisma.tenant.delete({
     where: { id }

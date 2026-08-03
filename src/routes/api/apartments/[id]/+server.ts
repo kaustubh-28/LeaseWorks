@@ -5,9 +5,9 @@ import { validateApartment } from '$lib/server/validation';
 import { handleServiceError } from '$lib/server/errors';
 
 // GET a specific apartment by ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const apartment = await getApartmentById(params.id);
+        const apartment = await getApartmentById(params.id, locals.user || undefined);
         return json(apartment);
     } catch (error) {
         return handleServiceError(error);
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // PUT to update an apartment
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
         const rawData = await request.json();
         
@@ -27,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         // Authoritative request validation
         const validatedData = validateApartment(rawData);
 
-        const apartment = await updateApartment(params.id, validatedData);
+        const apartment = await updateApartment(params.id, validatedData, locals.user || undefined);
         return json(apartment);
     } catch (error) {
         return handleServiceError(error);
@@ -35,9 +35,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 };
 
 // DELETE an apartment
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        await deleteApartment(params.id);
+        await deleteApartment(params.id, locals.user || undefined);
         return json({ message: 'Apartment deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

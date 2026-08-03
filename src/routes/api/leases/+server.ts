@@ -15,14 +15,14 @@ export const GET: RequestHandler = async () => {
 };
 
 // POST a new lease
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
     try {
         const rawData = await request.json();
         
         // Authoritative request validation
         const validatedData = validateLease(rawData);
         
-        const lease = await createLease(validatedData);
+        const lease = await createLease(validatedData, locals.user || undefined);
         return json(lease, { status: 201 });
     } catch (error) {
         return handleServiceError(error);

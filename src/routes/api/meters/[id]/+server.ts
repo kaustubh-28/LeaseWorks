@@ -5,9 +5,9 @@ import { validateMeter } from '$lib/server/validation';
 import { handleServiceError } from '$lib/server/errors';
 
 // GET a specific meter by ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const meter = await getMeterById(params.id);
+        const meter = await getMeterById(params.id, locals.user || undefined);
         return json(meter);
     } catch (error) {
         return handleServiceError(error);
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // PUT to update a meter
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
         const rawData = await request.json();
         
@@ -27,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         // Authoritative request validation
         const validatedData = validateMeter(rawData);
 
-        const meter = await updateMeter(params.id, validatedData);
+        const meter = await updateMeter(params.id, validatedData, locals.user || undefined);
         return json(meter);
     } catch (error) {
         return handleServiceError(error);
@@ -35,9 +35,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 };
 
 // DELETE a meter
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        await deleteMeter(params.id);
+        await deleteMeter(params.id, locals.user || undefined);
         return json({ message: 'Meter deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

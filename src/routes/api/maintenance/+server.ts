@@ -47,7 +47,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
         const validatedData = validateMaintenanceRequest(rawData);
 
-        const newRequest = await createTenantMaintenanceRequest(tenantId, validatedData);
+        const newRequest = await createTenantMaintenanceRequest(tenantId, validatedData, locals.user || undefined);
         return json({ success: true, request: newRequest }, { status: 201 });
     } catch (error) {
         return handleServiceError(error);

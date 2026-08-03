@@ -1,5 +1,6 @@
 import prisma from '../prisma';
 import { NotFoundError, AuthorizationError } from '../errors';
+import { type UserSession, canManageBuilding, canViewBuilding } from '../auth/policies';
 
 export async function getAllBuildings(userId?: string) {
   const where = userId ? { userId } : {};
@@ -12,7 +13,7 @@ export async function getAllBuildings(userId?: string) {
   });
 }
 
-export async function getBuildingById(id: string, currentUserId?: string) {
+export async function getBuildingById(id: string, user?: UserSession) {
   const building = await prisma.building.findUnique({
     where: { id },
     include: {
@@ -27,14 +28,18 @@ export async function getBuildingById(id: string, currentUserId?: string) {
     throw new NotFoundError(`Building with ID ${id} not found`);
   }
 
-  if (currentUserId && building.userId !== currentUserId) {
+  if (user && !canViewBuilding(user, building.userId)) {
     throw new AuthorizationError('You do not have access to this building');
   }
 
   return building;
 }
 
-export async function createBuilding(data: any) {
+export async function createBuilding(data: any, user?: UserSession) {
+  if (user && user.role !== 'LANDLORD') {
+    throw new AuthorizationError('Only landlords can create buildings');
+  }
+
   const { addressId, userId, ...rest } = data;
   return prisma.building.create({
     data: {
@@ -49,8 +54,12 @@ export async function createBuilding(data: any) {
   });
 }
 
-export async function updateBuilding(id: string, data: any, currentUserId?: string) {
-  const existing = await getBuildingById(id, currentUserId);
+export async function updateBuilding(id: string, data: any, user?: UserSession) {
+  const existing = await getBuildingById(id, user);
+
+  if (user && !canManageBuilding(user, existing.userId)) {
+    throw new AuthorizationError('You do not have permission to manage this building');
+  }
 
   const { addressId, userId, ...rest } = data;
   const updatePayload: any = {
@@ -71,8 +80,12 @@ export async function updateBuilding(id: string, data: any, currentUserId?: stri
   });
 }
 
-export async function deleteBuilding(id: string, currentUserId?: string) {
-  await getBuildingById(id, currentUserId);
+export async function deleteBuilding(id: string, user?: UserSession) {
+  const existing = await getBuildingById(id, user);
+
+  if (user && !canManageBuilding(user, existing.userId)) {
+    throw new AuthorizationError('You do not have permission to manage this building');
+  }
 
   return prisma.building.delete({
     where: { id }

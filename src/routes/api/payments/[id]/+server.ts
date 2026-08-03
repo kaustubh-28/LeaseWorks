@@ -5,9 +5,9 @@ import { validatePayment } from '$lib/server/validation';
 import { handleServiceError, AuthorizationError } from '$lib/server/errors';
 
 // GET a specific payment by ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const payment = await getPaymentById(params.id);
+        const payment = await getPaymentById(params.id, locals.user || undefined);
         return json(payment);
     } catch (error) {
         return handleServiceError(error);
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // PUT to update a payment
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
         const rawData = await request.json();
         
@@ -27,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         // Authoritative request validation
         const validatedData = validatePayment(rawData);
 
-        const payment = await updatePayment(params.id, validatedData);
+        const payment = await updatePayment(params.id, validatedData, locals.user || undefined);
         return json(payment);
     } catch (error) {
         return handleServiceError(error);
@@ -49,13 +49,13 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
         }
 
         // Fetch existing using service
-        const existing = await getPaymentById(id);
+        const existing = await getPaymentById(id, locals.user);
 
         // Update payment status using service
         const updated = await updatePayment(id, {
             ...existing,
             status
-        });
+        }, locals.user);
 
         return json({ success: true, payment: updated });
     } catch (error) {
@@ -64,9 +64,9 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 };
 
 // DELETE a payment
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        await deletePayment(params.id);
+        await deletePayment(params.id, locals.user || undefined);
         return json({ message: 'Payment deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

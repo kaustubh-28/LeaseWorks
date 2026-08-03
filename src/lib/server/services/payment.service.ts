@@ -1,5 +1,6 @@
 import prisma from '../prisma';
-import { NotFoundError } from '../errors';
+import { NotFoundError, AuthorizationError } from '../errors';
+import { type UserSession, canManagePayment, canViewPayment } from '../auth/policies';
 
 export async function getAllPayments() {
   return prisma.payment.findMany({
@@ -11,7 +12,7 @@ export async function getAllPayments() {
   });
 }
 
-export async function getPaymentById(id: string) {
+export async function getPaymentById(id: string, user?: UserSession) {
   const payment = await prisma.payment.findUnique({
     where: { id },
     include: {
@@ -29,10 +30,27 @@ export async function getPaymentById(id: string) {
     throw new NotFoundError(`Payment with ID ${id} not found`);
   }
 
+  if (user) {
+    const buildingOwnerId = payment.apartment.building.userId;
+    // Check if the tenant has a lease on this apartment
+    const hasLease = user.tenantId ? await prisma.lease.findFirst({
+      where: { apartmentId: payment.apartmentId, tenantId: user.tenantId }
+    }) : null;
+    const tenantId = hasLease ? user.tenantId : null;
+
+    if (!canViewPayment(user, buildingOwnerId, tenantId)) {
+      throw new AuthorizationError('You do not have access to view this payment');
+    }
+  }
+
   return payment;
 }
 
-export async function createPayment(data: any) {
+export async function createPayment(data: any, user?: UserSession) {
+  if (user && !canManagePayment(user)) {
+    throw new AuthorizationError('Only landlords can manage payments');
+  }
+
   const { apartmentId, ...rest } = data;
   return prisma.payment.create({
     data: {
@@ -47,8 +65,12 @@ export async function createPayment(data: any) {
   });
 }
 
-export async function updatePayment(id: string, data: any) {
-  await getPaymentById(id);
+export async function updatePayment(id: string, data: any, user?: UserSession) {
+  const existing = await getPaymentById(id, user);
+
+  if (user && !canManagePayment(user)) {
+    throw new AuthorizationError('Only landlords can manage payments');
+  }
 
   const { apartmentId, ...rest } = data;
   const payload: any = { ...rest };
@@ -68,8 +90,12 @@ export async function updatePayment(id: string, data: any) {
   });
 }
 
-export async function deletePayment(id: string) {
-  await getPaymentById(id);
+export async function deletePayment(id: string, user?: UserSession) {
+  const existing = await getPaymentById(id, user);
+
+  if (user && !canManagePayment(user)) {
+    throw new AuthorizationError('Only landlords can manage payments');
+  }
 
   return prisma.payment.delete({
     where: { id }

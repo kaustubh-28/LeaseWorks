@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         // Authoritative request validation
         const validatedData = validateBuilding(rawData);
 
-        const building = await createBuilding(validatedData);
+        const building = await createBuilding(validatedData, locals.user || undefined);
         return json(building, { status: 201 });
     } catch (error) {
         return handleServiceError(error);

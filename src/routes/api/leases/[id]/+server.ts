@@ -5,9 +5,9 @@ import { validateLease } from '$lib/server/validation';
 import { handleServiceError } from '$lib/server/errors';
 
 // GET a specific lease by ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const lease = await getLeaseById(params.id);
+        const lease = await getLeaseById(params.id, locals.user || undefined);
         return json(lease);
     } catch (error) {
         return handleServiceError(error);
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // PUT to update a lease
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
         const rawData = await request.json();
         
@@ -27,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         // Authoritative request validation
         const validatedData = validateLease(rawData);
 
-        const lease = await updateLease(params.id, validatedData);
+        const lease = await updateLease(params.id, validatedData, locals.user || undefined);
         return json(lease);
     } catch (error) {
         return handleServiceError(error);
@@ -35,9 +35,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 };
 
 // DELETE a lease
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        await deleteLease(params.id);
+        await deleteLease(params.id, locals.user || undefined);
         return json({ message: 'Lease deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

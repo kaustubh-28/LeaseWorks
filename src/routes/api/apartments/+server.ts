@@ -15,14 +15,14 @@ export const GET: RequestHandler = async () => {
 };
 
 // POST a new apartment
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
     try {
         const rawData = await request.json();
         
         // Authoritative request validation
         const validatedData = validateApartment(rawData);
         
-        const apartment = await createApartment(validatedData);
+        const apartment = await createApartment(validatedData, locals.user || undefined);
         return json(apartment, { status: 201 });
     } catch (error) {
         return handleServiceError(error);

@@ -5,9 +5,9 @@ import { validateTenant } from '$lib/server/validation';
 import { handleServiceError } from '$lib/server/errors';
 
 // GET a specific tenant by ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const tenant = await getTenantById(params.id);
+        const tenant = await getTenantById(params.id, locals.user || undefined);
         return json(tenant);
     } catch (error) {
         return handleServiceError(error);
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // PUT to update a tenant
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
         const rawData = await request.json();
         
@@ -27,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         // Authoritative request validation
         const validatedData = validateTenant(rawData);
 
-        const tenant = await updateTenant(params.id, validatedData);
+        const tenant = await updateTenant(params.id, validatedData, locals.user || undefined);
         return json(tenant);
     } catch (error) {
         return handleServiceError(error);
@@ -35,9 +35,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 };
 
 // DELETE a tenant
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        await deleteTenant(params.id);
+        await deleteTenant(params.id, locals.user || undefined);
         return json({ message: 'Tenant deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

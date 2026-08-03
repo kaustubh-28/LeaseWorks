@@ -15,14 +15,14 @@ export const GET: RequestHandler = async () => {
 };
 
 // POST a new meter
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
     try {
         const rawData = await request.json();
         
         // Authoritative request validation
         const validatedData = validateMeter(rawData);
         
-        const meter = await createMeter(validatedData);
+        const meter = await createMeter(validatedData, locals.user || undefined);
         return json(meter, { status: 201 });
     } catch (error) {
         return handleServiceError(error);

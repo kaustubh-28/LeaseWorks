@@ -5,9 +5,9 @@ import { validateCost } from '$lib/server/validation';
 import { handleServiceError } from '$lib/server/errors';
 
 // GET a specific cost by ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const cost = await getCostById(params.id);
+        const cost = await getCostById(params.id, locals.user || undefined);
         return json(cost);
     } catch (error) {
         return handleServiceError(error);
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // PUT to update a cost
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
         const rawData = await request.json();
         
@@ -27,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         // Authoritative request validation
         const validatedData = validateCost(rawData);
 
-        const cost = await updateCost(params.id, validatedData);
+        const cost = await updateCost(params.id, validatedData, locals.user || undefined);
         return json(cost);
     } catch (error) {
         return handleServiceError(error);
@@ -35,9 +35,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 };
 
 // DELETE a cost
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        await deleteCost(params.id);
+        await deleteCost(params.id, locals.user || undefined);
         return json({ message: 'Cost deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

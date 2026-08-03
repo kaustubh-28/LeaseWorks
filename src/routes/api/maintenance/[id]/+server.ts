@@ -18,18 +18,13 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
         }
 
         // Retrieve existing using service
-        const existing = await getMaintenanceRequestById(id);
-
-        // Enforce landlord ownership check
-        if (locals.user.role === 'LANDLORD' && existing.apartment.building.userId !== locals.user.id) {
-            throw new AuthorizationError('You do not own the building associated with this request');
-        }
+        const existing = await getMaintenanceRequestById(id, locals.user);
 
         // Update request using service
         const updated = await updateMaintenanceRequest(id, {
             ...existing,
             status
-        });
+        }, locals.user);
 
         return json({ success: true, request: updated });
     } catch (error) {

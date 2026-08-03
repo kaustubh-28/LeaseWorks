@@ -15,14 +15,14 @@ export const GET: RequestHandler = async () => {
 };
 
 // POST a new cost
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
     try {
         const rawData = await request.json();
         
         // Authoritative request validation
         const validatedData = validateCost(rawData);
         
-        const cost = await createCost(validatedData);
+        const cost = await createCost(validatedData, locals.user || undefined);
         return json(cost, { status: 201 });
     } catch (error) {
         return handleServiceError(error);

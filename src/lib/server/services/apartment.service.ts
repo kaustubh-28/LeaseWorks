@@ -1,5 +1,6 @@
 import prisma from '../prisma';
-import { NotFoundError } from '../errors';
+import { NotFoundError, AuthorizationError } from '../errors';
+import { type UserSession, canManageApartment, canViewApartment } from '../auth/policies';
 
 export async function getAllApartments() {
   return prisma.apartment.findMany({
@@ -11,7 +12,7 @@ export async function getAllApartments() {
   });
 }
 
-export async function getApartmentById(id: string) {
+export async function getApartmentById(id: string, user?: UserSession) {
   const apartment = await prisma.apartment.findUnique({
     where: { id },
     include: {
@@ -37,11 +38,34 @@ export async function getApartmentById(id: string) {
     throw new NotFoundError(`Apartment with ID ${id} not found`);
   }
 
+  if (user) {
+    const buildingOwnerId = apartment.building.userId;
+    // Check if user is tenant of any lease in this apartment
+    const isTenant = apartment.leases.some(l => l.tenantId === user.tenantId);
+    const activeTenantId = isTenant ? user.tenantId : null;
+
+    if (!canViewApartment(user, buildingOwnerId, activeTenantId)) {
+      throw new AuthorizationError('You do not have access to this apartment');
+    }
+  }
+
   return apartment;
 }
 
-export async function createApartment(data: any) {
+export async function createApartment(data: any, user?: UserSession) {
   const { buildingId, ...rest } = data;
+
+  const building = await prisma.building.findUnique({
+    where: { id: buildingId }
+  });
+  if (!building) {
+    throw new NotFoundError(`Building with ID ${buildingId} not found`);
+  }
+
+  if (user && !canManageApartment(user, building.userId)) {
+    throw new AuthorizationError('You do not have permission to manage apartments in this building');
+  }
+
   return prisma.apartment.create({
     data: {
       ...rest,
@@ -55,9 +79,12 @@ export async function createApartment(data: any) {
   });
 }
 
-export async function updateApartment(id: string, data: any) {
-  // Check if exists
-  await getApartmentById(id);
+export async function updateApartment(id: string, data: any, user?: UserSession) {
+  const existing = await getApartmentById(id, user);
+
+  if (user && !canManageApartment(user, existing.building.userId)) {
+    throw new AuthorizationError('You do not have permission to manage this apartment');
+  }
 
   const { buildingId, ...rest } = data;
   const updatePayload: any = { ...rest };
@@ -89,9 +116,12 @@ export async function updateApartment(id: string, data: any) {
   });
 }
 
-export async function deleteApartment(id: string) {
-  // Check if exists
-  await getApartmentById(id);
+export async function deleteApartment(id: string, user?: UserSession) {
+  const existing = await getApartmentById(id, user);
+
+  if (user && !canManageApartment(user, existing.building.userId)) {
+    throw new AuthorizationError('You do not have permission to manage this apartment');
+  }
 
   return prisma.apartment.delete({
     where: { id }

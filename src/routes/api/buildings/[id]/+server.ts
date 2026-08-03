@@ -7,8 +7,7 @@ import { handleServiceError } from '$lib/server/errors';
 // GET a specific building by ID
 export const GET: RequestHandler = async ({ params, locals }) => {
     try {
-        const userId = locals.user?.id;
-        const building = await getBuildingById(params.id, userId);
+        const building = await getBuildingById(params.id, locals.user || undefined);
         return json(building);
     } catch (error) {
         return handleServiceError(error);
@@ -18,7 +17,6 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 // PUT to update a building
 export const PUT: RequestHandler = async ({ params, request, locals }) => {
     try {
-        const userId = locals.user?.id;
         const rawData = await request.json();
 
         // Inject owner user ID
@@ -29,7 +27,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
         // Authoritative request validation
         const validatedData = validateBuilding(rawData);
 
-        const building = await updateBuilding(params.id, validatedData, userId);
+        const building = await updateBuilding(params.id, validatedData, locals.user || undefined);
         return json(building);
     } catch (error) {
         return handleServiceError(error);
@@ -39,8 +37,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 // DELETE a building
 export const DELETE: RequestHandler = async ({ params, locals }) => {
     try {
-        const userId = locals.user?.id;
-        await deleteBuilding(params.id, userId);
+        await deleteBuilding(params.id, locals.user || undefined);
         return json({ message: 'Building deleted successfully' });
     } catch (error) {
         return handleServiceError(error);

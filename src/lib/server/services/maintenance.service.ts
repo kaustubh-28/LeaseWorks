@@ -1,5 +1,10 @@
 import prisma from '../prisma';
-import { NotFoundError } from '../errors';
+import { NotFoundError, AuthorizationError } from '../errors';
+import { 
+  type UserSession, 
+  canManageMaintenanceRequest, 
+  canViewMaintenanceRequest 
+} from '../auth/policies';
 
 export async function getAllMaintenanceRequests() {
   return prisma.maintenanceRequest.findMany({
@@ -35,7 +40,7 @@ export async function getAllMaintenanceRequestsFiltered(role: string, userId: st
   });
 }
 
-export async function getMaintenanceRequestById(id: string) {
+export async function getMaintenanceRequestById(id: string, user?: UserSession) {
   const request = await prisma.maintenanceRequest.findUnique({
     where: { id },
     include: {
@@ -54,10 +59,18 @@ export async function getMaintenanceRequestById(id: string) {
     throw new NotFoundError(`Maintenance Request with ID ${id} not found`);
   }
 
+  if (user && !canViewMaintenanceRequest(user, request.apartment.building.userId, request.tenantId)) {
+    throw new AuthorizationError('You do not have access to view this maintenance request');
+  }
+
   return request;
 }
 
-export async function createMaintenanceRequest(data: any) {
+export async function createMaintenanceRequest(data: any, user?: UserSession) {
+  if (user && user.role !== 'LANDLORD') {
+    throw new AuthorizationError('Only landlords can manage all maintenance requests');
+  }
+
   const { tenantId, apartmentId, ...rest } = data;
   return prisma.maintenanceRequest.create({
     data: {
@@ -74,7 +87,11 @@ export async function createMaintenanceRequest(data: any) {
   });
 }
 
-export async function createTenantMaintenanceRequest(tenantId: string, data: any) {
+export async function createTenantMaintenanceRequest(tenantId: string, data: any, user?: UserSession) {
+  if (user && (!user.tenantId || user.tenantId !== tenantId)) {
+    throw new AuthorizationError('You do not have permission to submit requests for this tenant');
+  }
+
   const activeLease = await prisma.lease.findFirst({
     where: { tenantId }
   });
@@ -96,8 +113,12 @@ export async function createTenantMaintenanceRequest(tenantId: string, data: any
   });
 }
 
-export async function updateMaintenanceRequest(id: string, data: any) {
-  await getMaintenanceRequestById(id);
+export async function updateMaintenanceRequest(id: string, data: any, user?: UserSession) {
+  const existing = await getMaintenanceRequestById(id, user);
+
+  if (user && !canManageMaintenanceRequest(user, existing.apartment.building.userId, existing.tenantId)) {
+    throw new AuthorizationError('You do not have permission to manage this maintenance request');
+  }
 
   const { tenantId, apartmentId, ...rest } = data;
   const payload: any = { ...rest };
@@ -121,8 +142,12 @@ export async function updateMaintenanceRequest(id: string, data: any) {
   });
 }
 
-export async function deleteMaintenanceRequest(id: string) {
-  await getMaintenanceRequestById(id);
+export async function deleteMaintenanceRequest(id: string, user?: UserSession) {
+  const existing = await getMaintenanceRequestById(id, user);
+
+  if (user && !canManageMaintenanceRequest(user, existing.apartment.building.userId, existing.tenantId)) {
+    throw new AuthorizationError('You do not have permission to manage this maintenance request');
+  }
 
   return prisma.maintenanceRequest.delete({
     where: { id }
