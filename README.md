@@ -1,43 +1,37 @@
-# 🚧 Project in Development 🚧
-
-⚠️ **This project is still in development!** Expect changes, bugs, and work-in-progress features.
-We appreciate your contribution and feedback as we improve.
-
-## 🚀 Looking for Contributors!
-
-We’d love your help! Whether it’s fixing bugs, adding new features, or improving documentation, your contributions are
-welcome.
-
-[Contributing Guide](CONTRIBUTING.md)
-
-👉 **Check out our [issues](https://github.com/SuperLonci/LeaseWorks/issues) to get started.**  
-💡 If you have any questions, feel free to open a discussion or reach out!
-
 # LeaseWorks
 
-A smart and efficient property and tenant management application.
-It helps landlords and property managers track rental payments, organize leases, manage maintenance requests, and
-streamline communication with tenants.
-Built for simplicity and scalability, it ensures seamless real estate management with modern tools and automation.
+LeaseWorks is a smart, efficient property and tenant management application. It is designed to help landlords and property managers track rental payments, organize leases, manage maintenance requests, and streamline communication with tenants.
 
-## Features
+## Design Philosophy
 
-- **Rental Payments**: Track and manage rental payments with ease.
-- **Lease Management**: Organize and manage leases efficiently.
-- **Tenant Communication**: Streamline communication with tenants.
-- **Scalability**: Built to scale with your property management needs.
+The application features a custom double-ledger design identity, drawing inspiration from physical ledger books and editorial paper layout systems:
+- Grid Dividers: Double-border lines resembling vintage paper ledgers.
+- Typography: Serif typefaces for headers and structured sans-serif typefaces for records, lists, badges, and user inputs.
+- Color Palette: Warm parchment backgrounds combined with emerald greens for success/primary actions and ledger red for overdue statuses or alerts.
+- Corners & Borders: Sharp edges with minimal border radii to maintain a physical-folder aesthetic.
 
-## Planned Features
+## Technology Stack
 
-- **Generate Reports**: Generate financial and property reports.
-- **Maintenance Requests**: Manage and track maintenance requests.
-- **Data Analytics**: Provide insights and analytics for property management.
+- Framework: SvelteKit (Svelte 5, Vite)
+- Styling: Tailwind CSS v4
+- Database & ORM: SQLite with Prisma ORM
+- Authentication: Cookie-based sessions validated using JSON Web Tokens (JWT) and passwords encrypted using bcrypt
 
-## Technologies Used
+## Key Features
 
-- **TypeScript**
-- **Svelte**
-- **Prisma**
+- Landlord Dashboard: Centralized view of property tables, financial aggregates, and priority alerts.
+- Tenant Portal: Portal for tenants to review rent obligations, view lease terms, and report issues.
+- Rental Payments: Financial tracker for payments with statuses such as paid, pending, and overdue.
+- Lease Management: Structured contracts binding tenants to apartments with specified rents and active dates.
+- Maintenance Requests: Trouble ticket submission and status tracking (urgencies: low, medium, high, emergency; statuses: pending, in progress, resolved).
+- Metadata-Driven CRUD Grids: Administrative tables for addresses, buildings, apartments, meters, costs, and tenant profiles.
+
+## Repository Structure
+
+- src/lib/entities.ts: Contains FormFieldSchemas and TypeScript type definitions.
+- src/routes: SvelteKit page routes and UI views.
+- src/routes/api: REST API controllers handling authentication, dashboard statistics, and database CRUD.
+- prisma: Database schema definitions and seeding scripts.
 
 ## Getting Started
 
@@ -49,23 +43,25 @@ Built for simplicity and scalability, it ensures seamless real estate management
 ### Installation
 
 1. Clone the repository:
-    ```sh
-    git clone https://github.com/SuperLonci/LeaseWorks
-    ```
+   ```sh
+   git clone https://github.com/kaustubh-28/LeaseWorks.git
+   ```
+
 2. Navigate to the project directory:
-    ```sh
-    cd LeaseWorks
-    ```
+   ```sh
+   cd LeaseWorks
+   ```
+
 3. Install dependencies:
-    ```sh
-    npm install
-    ```
-4. Run the Prisma migrations to set up the database:
-    ```sh
-    npx prisma migrate dev --name init
-    ```
-   This should also run the 'prisma db seed' command to seed the database with initial data. If this does not happen,
-   run:
+   ```sh
+   npm install
+   ```
+
+4. Run the Prisma migrations to set up the database and apply the seed:
+   ```sh
+   npx prisma migrate dev --name init
+   ```
+   If seeding does not run automatically, seed the database with:
    ```sh
    npx prisma db seed
    ```
@@ -73,34 +69,19 @@ Built for simplicity and scalability, it ensures seamless real estate management
 ### Running the Application
 
 1. Start the development server:
-    ```sh
-    npm run dev
-    ```
-2. Open your browser and navigate to `http://localhost:5173`.
-3. If you set up everything correctly you should be logged in and ready to go
+   ```sh
+   npm run dev
+   ```
 
-## Project Structure
+2. Open your browser and navigate to http://localhost:5173.
 
-- `src/lib/entities.ts`: Contains TypeScript enums and types for the application.
-- `src/routes`: Contains Svelte components for the application.
-- `src/routes/api`: Contains API routes for the application.
-- `prisma`: Contains Prisma schema and seed for the application.
+## Roadmap & Upcoming Features
 
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request for any changes.
+- Tenant Utility Billing: Interactive grids displaying utility costs and water/electricity usage trackers using SVG/CSS chart structures.
+- Dynamic Invoicing Generator: Automated PDF invoice templates matching the double-ledger aesthetic for lease agreements and monthly payments.
+- Form Actions Refactor: Conversion of administrative CRUD paths from client-side requests to SvelteKit Form Actions for robust transaction validation.
+- Enhanced Validation: Database constraint enforcement using middleware layers before transaction execution.
 
 ## License
 
-[![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
-
-This work is licensed under a
-[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa].
-
-[![CC BY-NC-SA 4.0][cc-by-nc-sa-image]][cc-by-nc-sa]
-
-[cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
-
-[cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
-
-[cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
+This work is licensed under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
