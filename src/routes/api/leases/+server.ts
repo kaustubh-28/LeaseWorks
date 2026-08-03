@@ -1,92 +1,30 @@
-import prisma from '$lib/server/prisma';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getAllLeases, createLease } from '$lib/server/services/lease.service';
+import { validateLease } from '$lib/server/validation';
+import { handleServiceError } from '$lib/server/errors';
 
 // GET all leases
 export const GET: RequestHandler = async () => {
     try {
-        const leases = await prisma.lease.findMany({
-            include: {
-                apartment: {
-                    select: {
-                        name: true
-                    }
-                },
-                tenant: {
-                    select: {
-                        name: true
-                    }
-                }
-            }
-        });
-
-        return new Response(JSON.stringify(leases), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const leases = await getAllLeases();
+        return json(leases);
     } catch (error) {
-        return new Response(JSON.stringify({
-            error: 'Failed to fetch leases',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return handleServiceError(error);
     }
 };
 
 // POST a new lease
 export const POST: RequestHandler = async ({ request }) => {
     try {
-        // Parse the request body
-        const data = await request.json();
-
-        // Ensure dates are in ISO-8601 format
-        if (data.startDate) {
-            data.startDate = new Date(data.startDate).toISOString();
-        }
-        if (data.endDate) {
-            data.endDate = new Date(data.endDate).toISOString();
-        }
-
-        // Create the lease
-        const lease = await prisma.lease.create({
-            data,
-            include: {
-                apartment: {
-                    select: {
-                        name: true
-                    }
-                },
-                tenant: {
-                    select: {
-                        name: true
-                    }
-                }
-            }
-        });
-
-        return new Response(JSON.stringify(lease), {
-            status: 201, // Created
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const rawData = await request.json();
+        
+        // Authoritative request validation
+        const validatedData = validateLease(rawData);
+        
+        const lease = await createLease(validatedData);
+        return json(lease, { status: 201 });
     } catch (error) {
-        console.error('Error creating lease:', error);
-
-        // Handle validation errors more gracefully
-        if (error instanceof Error && 'code' in error && error.code === 'P2002') {
-            return new Response(JSON.stringify({
-                message: 'A lease with these details already exists'
-            }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        return new Response(JSON.stringify({
-            message: 'Failed to create lease',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return handleServiceError(error);
     }
 };

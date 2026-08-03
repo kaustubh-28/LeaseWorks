@@ -1,46 +1,74 @@
-import prisma from '$lib/server/prisma';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getPaymentById, updatePayment, deletePayment } from '$lib/server/services/payment.service';
+import { validatePayment } from '$lib/server/validation';
+import { handleServiceError, AuthorizationError } from '$lib/server/errors';
 
-// PATCH payment status
-export const PATCH: RequestHandler = async ({ params, request, locals }) => {
-    if (!locals.user) {
-        return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { id } = params;
-    if (!id) {
-        return json({ error: 'Missing payment ID' }, { status: 400 });
-    }
-
+// GET a specific payment by ID
+export const GET: RequestHandler = async ({ params }) => {
     try {
+        const payment = await getPaymentById(params.id);
+        return json(payment);
+    } catch (error) {
+        return handleServiceError(error);
+    }
+};
+
+// PUT to update a payment
+export const PUT: RequestHandler = async ({ params, request }) => {
+    try {
+        const rawData = await request.json();
+        
+        // Remove DB metadata fields
+        delete rawData.id;
+        delete rawData.createdAt;
+        delete rawData.updatedAt;
+
+        // Authoritative request validation
+        const validatedData = validatePayment(rawData);
+
+        const payment = await updatePayment(params.id, validatedData);
+        return json(payment);
+    } catch (error) {
+        return handleServiceError(error);
+    }
+};
+
+// PATCH to update payment status
+export const PATCH: RequestHandler = async ({ params, request, locals }) => {
+    try {
+        if (!locals.user) {
+            throw new AuthorizationError('Unauthorized');
+        }
+
+        const { id } = params;
         const { status } = await request.json();
 
         if (!status) {
             return json({ error: 'Status is required' }, { status: 400 });
         }
 
-        // Fetch existing payment
-        const existing = await prisma.payment.findUnique({
-            where: { id }
-        });
+        // Fetch existing using service
+        const existing = await getPaymentById(id);
 
-        if (!existing) {
-            return json({ error: 'Payment not found' }, { status: 404 });
-        }
-
-        // Update payment status
-        const updated = await prisma.payment.update({
-            where: { id },
-            data: { status }
+        // Update payment status using service
+        const updated = await updatePayment(id, {
+            ...existing,
+            status
         });
 
         return json({ success: true, payment: updated });
     } catch (error) {
-        console.error('Error updating payment status:', error);
-        return json({
-            error: 'Failed to update payment status',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }, { status: 500 });
+        return handleServiceError(error);
+    }
+};
+
+// DELETE a payment
+export const DELETE: RequestHandler = async ({ params }) => {
+    try {
+        await deletePayment(params.id);
+        return json({ message: 'Payment deleted successfully' });
+    } catch (error) {
+        return handleServiceError(error);
     }
 };

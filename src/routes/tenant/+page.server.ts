@@ -1,6 +1,9 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import prisma from '$lib/server/prisma';
+import { getTenantById } from '$lib/server/services/tenant.service';
+import { getLeaseByTenantId } from '$lib/server/services/lease.service';
+import { getPaymentsByApartmentId } from '$lib/server/services/payment.service';
+import { getMaintenanceRequestsByTenantId } from '$lib/server/services/maintenance.service';
 
 export const load: PageServerLoad = async ({ locals }) => {
     if (!locals.user) {
@@ -18,28 +21,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 
     try {
         // Fetch Tenant profile
-        const tenant = await prisma.tenant.findUnique({
-            where: { id: tenantId },
-            include: { address: true }
-        });
+        const tenant = await getTenantById(tenantId);
 
         // Fetch active lease
-        const lease = await prisma.lease.findFirst({
-            where: { tenantId },
-            include: {
-                apartment: {
-                    include: {
-                        building: {
-                            include: {
-                                address: true,
-                                user: true // Owner / Landlord details
-                            }
-                        }
-                    }
-                }
-            },
-            orderBy: { startDate: 'desc' }
-        });
+        const lease = await getLeaseByTenantId(tenantId);
 
         if (!lease) {
             return {
@@ -51,16 +36,10 @@ export const load: PageServerLoad = async ({ locals }) => {
         }
 
         // Fetch payments for this apartment
-        const payments = await prisma.payment.findMany({
-            where: { apartmentId: lease.apartmentId },
-            orderBy: { dueDate: 'desc' }
-        });
+        const payments = await getPaymentsByApartmentId(lease.apartmentId);
 
         // Fetch maintenance requests
-        const maintenanceRequests = await prisma.maintenanceRequest.findMany({
-            where: { tenantId },
-            orderBy: { createdAt: 'desc' }
-        });
+        const maintenanceRequests = await getMaintenanceRequestsByTenantId(tenantId);
 
         return {
             tenant,

@@ -1,149 +1,45 @@
-import prisma from '$lib/server/prisma';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getAddressById, updateAddress, deleteAddress } from '$lib/server/services/address.service';
+import { validateAddress } from '$lib/server/validation';
+import { handleServiceError } from '$lib/server/errors';
 
 // GET a specific address by ID
 export const GET: RequestHandler = async ({ params }) => {
     try {
-        // Access the id from params
-        const id = params.id;
-
-        const address = await prisma.address.findUnique({
-            where: { id },
-            include: {
-                buildings: true
-            }
-        });
-
-        if (!address) {
-            return new Response(JSON.stringify({ message: 'address not found' }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        return new Response(JSON.stringify(address), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const address = await getAddressById(params.id);
+        return json(address);
     } catch (error) {
-        return new Response(JSON.stringify({
-            message: 'Failed to fetch address',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return handleServiceError(error);
     }
 };
 
 // PUT to update an address
 export const PUT: RequestHandler = async ({ params, request }) => {
     try {
-        const id = params.id;
+        const rawData = await request.json();
+        
+        // Remove DB metadata fields
+        delete rawData.id;
+        delete rawData.createdAt;
+        delete rawData.updatedAt;
 
-        // Verify ownership of the address
-        const existingAddress = await prisma.address.findUnique({
-            where: { id }
-        });
+        // Authoritative request validation
+        const validatedData = validateAddress(rawData);
 
-        if (!existingAddress) {
-            return new Response(JSON.stringify({
-                message: 'address not found'
-            }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        const data = await request.json();
-
-        delete data.createdAt;
-        delete data.updatedAt;
-
-        const updateData: any = {
-            ...data
-        };
-
-        // Handle building relationship
-        if (data.addressId) {
-            updateData.address = { connect: { id: data.addressId } };
-        }
-
-        const address = await prisma.address.update({
-            where: { id },
-            data,
-            include: {}
-        });
-
-        return new Response(JSON.stringify(address), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const address = await updateAddress(params.id, validatedData);
+        return json(address);
     } catch (error) {
-        console.error('Error updating address:', error);
-
-        // Handle record not found
-        if (error instanceof Error && 'code' in error && error.code === 'P2025') {
-            return new Response(JSON.stringify({
-                message: 'address not found'
-            }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        return new Response(JSON.stringify({
-            message: 'Failed to update address',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return handleServiceError(error);
     }
 };
 
 // DELETE an address
 export const DELETE: RequestHandler = async ({ params }) => {
     try {
-        const id = params.id;
-
-        const existingAddress = await prisma.address.findUnique({
-            where: { id }
-        });
-
-        if (!existingAddress) {
-            return new Response(JSON.stringify({
-                message: 'address not found'
-            }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        await prisma.address.delete({
-            where: { id }
-        });
-
-        return new Response(JSON.stringify({ message: 'address deleted successfully' }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        await deleteAddress(params.id);
+        return json({ message: 'Address deleted successfully' });
     } catch (error) {
-        console.error('Error deleting address:', error);
-
-        // Handle record not found
-        if (error instanceof Error && 'code' in error && error.code === 'P2025') {
-            return new Response(JSON.stringify({
-                message: 'address not found'
-            }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        return new Response(JSON.stringify({
-            message: 'Failed to delete address',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return handleServiceError(error);
     }
 };

@@ -1,6 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import prisma from '$lib/server/prisma';
+import { getAllBuildings } from '$lib/server/services/building.service';
+import { getLandlordApartments } from '$lib/server/services/apartment.service';
+import { getTotalOutgoingCosts } from '$lib/server/services/cost.service';
+import { getTotalIncomingPayments } from '$lib/server/services/payment.service';
+import { 
+    getActiveMaintenanceRequestsCount, 
+    getUrgentMaintenanceAlerts 
+} from '$lib/server/services/maintenance.service';
 
 export const load: PageServerLoad = async ({ locals }) => {
     if (!locals.user) {
@@ -14,77 +21,19 @@ export const load: PageServerLoad = async ({ locals }) => {
     try {
         const userId = locals.user.id;
 
-        // Fetch buildings
-        const buildings = await prisma.building.findMany({
-            where: { userId },
-            include: { address: true }
-        });
+        // Fetch buildings via BuildingService
+        const buildings = await getAllBuildings(userId);
         const buildingIds = buildings.map(b => b.id);
 
-        // Fetch apartments with active leases and payments
-        const apartments = await prisma.apartment.findMany({
-            where: { buildingId: { in: buildingIds } },
-            include: {
-                building: {
-                    include: { address: true }
-                },
-                leases: {
-                    include: { tenant: true },
-                    orderBy: { startDate: 'desc' }
-                },
-                payments: {
-                    orderBy: { dueDate: 'desc' }
-                }
-            }
-        });
-
-        // Calculate statistics
-        // 1. Outgoing costs
-        const costs = await prisma.cost.findMany({
-            where: { buildingId: { in: buildingIds } },
-            select: { amount: true }
-        });
-        const outgoing = costs.reduce((sum, c) => sum + c.amount, 0);
-
-        // 2. Incoming paid payments
+        // Fetch apartments with active leases and payments via ApartmentService
+        const apartments = await getLandlordApartments(buildingIds);
         const apartmentIds = apartments.map(a => a.id);
-        const paidPayments = await prisma.payment.findMany({
-            where: {
-                apartmentId: { in: apartmentIds },
-                status: 'paid'
-            },
-            select: { amount: true }
-        });
-        const incoming = paidPayments.reduce((sum, p) => sum + p.amount, 0);
 
-        // 3. Count active maintenance requests
-        const activeRequestsCount = await prisma.maintenanceRequest.count({
-            where: {
-                apartmentId: { in: apartmentIds },
-                status: { in: ['PENDING', 'IN_PROGRESS'] }
-            }
-        });
-
-        // 4. Get urgent alerts
-        const urgentAlerts = await prisma.maintenanceRequest.findMany({
-            where: {
-                apartmentId: { in: apartmentIds },
-                status: { in: ['PENDING', 'IN_PROGRESS'] },
-                urgency: { in: ['HIGH', 'EMERGENCY'] }
-            },
-            include: {
-                apartment: {
-                    include: {
-                        building: {
-                            include: { address: true }
-                        }
-                    }
-                },
-                tenant: true
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 3
-        });
+        // Calculate statistics via services
+        const outgoing = await getTotalOutgoingCosts(buildingIds);
+        const incoming = await getTotalIncomingPayments(apartmentIds);
+        const activeRequestsCount = await getActiveMaintenanceRequestsCount(apartmentIds);
+        const urgentAlerts = await getUrgentMaintenanceAlerts(apartmentIds, 3);
 
         return {
             buildings,
@@ -94,7 +43,7 @@ export const load: PageServerLoad = async ({ locals }) => {
                 outgoing,
                 net: incoming - outgoing,
                 activeRequestsCount,
-                urgentAlerts: JSON.parse(JSON.stringify(urgentAlerts)) // Convert Date objects to JSON-safe formats
+                urgentAlerts: JSON.parse(JSON.stringify(urgentAlerts)) // JSON date serialization fallback
             }
         };
     } catch (error) {

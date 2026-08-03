@@ -1,59 +1,30 @@
-import prisma from '$lib/server/prisma';
-import type {RequestHandler} from './$types';
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getAllTenants, createTenant } from '$lib/server/services/tenant.service';
+import { validateTenant } from '$lib/server/validation';
+import { handleServiceError } from '$lib/server/errors';
 
 // GET all tenants
 export const GET: RequestHandler = async () => {
     try {
-        const tenants = await prisma.tenant.findMany();
-
-        return new Response(JSON.stringify(tenants), {
-            headers: {'Content-Type': 'application/json'},
-        });
+        const tenants = await getAllTenants();
+        return json(tenants);
     } catch (error) {
-        return new Response(JSON.stringify({
-            error: 'Failed to fetch tenants',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: {'Content-Type': 'application/json'},
-        });
+        return handleServiceError(error);
     }
 };
 
 // POST a new tenant
-export const POST: RequestHandler = async ({request}) => {
+export const POST: RequestHandler = async ({ request }) => {
     try {
-        // Parse the request body
-        const data = await request.json();
-
-        // Create the tenant
-        const tenant = await prisma.tenant.create({
-            data
-        });
-
-        return new Response(JSON.stringify(tenant), {
-            status: 201, // Created
-            headers: {'Content-Type': 'application/json'},
-        });
+        const rawData = await request.json();
+        
+        // Authoritative request validation
+        const validatedData = validateTenant(rawData);
+        
+        const tenant = await createTenant(validatedData);
+        return json(tenant, { status: 201 });
     } catch (error) {
-        console.error('Error creating tenant:', error);
-
-        // Handle validation errors more gracefully
-        if (error instanceof Error && 'code' in error && error.code === 'P2002') {
-            return new Response(JSON.stringify({
-                message: 'A tenant with this information already exists'
-            }), {
-                status: 400,
-                headers: {'Content-Type': 'application/json'},
-            });
-        }
-
-        return new Response(JSON.stringify({
-            message: 'Failed to create tenant',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }), {
-            status: 500,
-            headers: {'Content-Type': 'application/json'},
-        });
+        return handleServiceError(error);
     }
 };
