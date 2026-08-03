@@ -1,329 +1,214 @@
 <script lang="ts">
     import type { PageData } from './$types';
-    import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '$lib/components/card';
     import { Button } from '$lib/components/button';
-    import { invalidateAll } from '$app/navigation';
+    import { Table, TableHeader, TableBody, TableRow, TableCell, TableHead } from '$lib/components/table';
 
     export let data: PageData;
 
     $: buildings = data.buildings || [];
     $: maintenanceRequests = data.maintenanceRequests || [];
 
-    // Derive Portfolio Analytics
-    $: totalBuildingsCount = buildings.length;
-    $: totalUnits = buildings.reduce((sum: number, b: any) => sum + (b.apartments?.length || 0), 0);
-    $: occupiedUnits = buildings.reduce((sum: number, b: any) => {
-        return sum + (b.apartments || []).filter((apt: any) => {
-            return apt.leases.some((l: any) => {
-                const now = new Date();
-                const start = new Date(l.startDate);
-                const end = l.endDate ? new Date(l.endDate) : null;
-                return start <= now && (!end || end >= now);
-            });
-        }).length;
-    }, 0);
-    $: vacantUnits = totalUnits - occupiedUnits;
-    $: occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+    // Flat list of all apartments (units) in the portfolio
+    $: apartments = buildings.flatMap((b: any) => {
+        return (b.apartments || []).map((apt: any) => ({
+            ...apt,
+            buildingName: b.name,
+            addressText: `${b.name}, Apt ${apt.name}`
+        }));
+    });
 
-    $: monthlyRevenue = buildings.reduce((sum: number, b: any) => {
-        return sum + (b.apartments || []).reduce((aptSum: number, apt: any) => {
-            const activeLease = apt.leases.find((l: any) => {
-                const now = new Date();
-                const start = new Date(l.startDate);
-                const end = l.endDate ? new Date(l.endDate) : null;
-                return start <= now && (!end || end >= now);
-            });
-            return aptSum + (activeLease ? activeLease.rentAmount : 0);
-        }, 0);
+    // Stats calculations
+    $: totalRevenue = apartments.reduce((sum: number, apt: any) => {
+        const activeLease = apt.leases?.find((l: any) => {
+            const now = new Date();
+            const start = new Date(l.startDate);
+            const end = l.endDate ? new Date(l.endDate) : null;
+            return start <= now && (!end || end >= now);
+        });
+        return sum + (activeLease ? activeLease.rentAmount : 0);
     }, 0);
 
-    $: monthlyExpenses = buildings.reduce((sum: number, b: any) => {
-        const buildingCosts = (b.costs || []).reduce((cSum: number, c: any) => cSum + c.amount, 0);
-        const apartmentCosts = (b.apartments || []).reduce((aptSum: number, apt: any) => {
-            return aptSum + (apt.costs || []).reduce((cSum: number, c: any) => cSum + c.amount, 0);
-        }, 0);
-        return sum + buildingCosts + apartmentCosts;
-    }, 0);
+    $: vacantPropertiesCount = apartments.filter((apt: any) => {
+        const activeLease = apt.leases?.find((l: any) => {
+            const now = new Date();
+            const start = new Date(l.startDate);
+            const end = l.endDate ? new Date(l.endDate) : null;
+            return start <= now && (!end || end >= now);
+        });
+        return !activeLease;
+    }).length;
 
-    $: avgRent = occupiedUnits > 0 ? monthlyRevenue / occupiedUnits : 0;
-    $: revPerUnit = totalUnits > 0 ? monthlyRevenue / totalUnits : 0;
+    $: activeRequestsCount = maintenanceRequests.filter((r: any) => r.status !== 'RESOLVED').length;
 
-    // Filtered maintenance requests for summary
-    $: openMaintenanceRequests = maintenanceRequests.filter((req: any) => req.status !== 'RESOLVED');
-    $: highUrgencyRequests = openMaintenanceRequests.filter((req: any) => req.urgency === 'HIGH' || req.urgency === 'EMERGENCY');
-    $: normalUrgencyRequests = openMaintenanceRequests.filter((req: any) => req.urgency === 'LOW' || req.urgency === 'MEDIUM');
+    // Search query
+    let searchQuery = '';
 
-    function getBuildingStats(building: any) {
-        const apartments = building.apartments || [];
-        const aptCount = apartments.length;
-        const occupied = apartments.filter((apt: any) => {
-            return apt.leases.some((l: any) => {
-                const now = new Date();
-                const start = new Date(l.startDate);
-                const end = l.endDate ? new Date(l.endDate) : null;
-                return start <= now && (!end || end >= now);
-            });
-        }).length;
-        const vacant = aptCount - occupied;
-        const occupancyPct = aptCount > 0 ? (occupied / aptCount) * 100 : 0;
-
-        const revenue = apartments.reduce((sum: number, apt: any) => {
-            const activeLease = apt.leases.find((l: any) => {
-                const now = new Date();
-                const start = new Date(l.startDate);
-                const end = l.endDate ? new Date(l.endDate) : null;
-                return start <= now && (!end || end >= now);
-            });
-            return sum + (activeLease ? activeLease.rentAmount : 0);
-        }, 0);
-
-        const expenses = ((building.costs || []).reduce((sum: number, c: any) => sum + c.amount, 0) || 0) +
-                         apartments.reduce((sum: number, apt: any) => sum + ((apt.costs || []).reduce((cSum: number, c: any) => cSum + c.amount, 0) || 0), 0);
-
-        const openMaintenance = maintenanceRequests.filter((req: any) => {
-            return req.apartment.buildingId === building.id && req.status !== 'RESOLVED';
-        }).length;
-
-        return {
-            aptCount,
-            occupied,
-            vacant,
-            occupancyPct,
-            revenue,
-            expenses,
-            openMaintenance
-        };
+    // Helper: get tenant name
+    function getTenantName(apt: any) {
+        const activeLease = apt.leases?.find((l: any) => {
+            const now = new Date();
+            const start = new Date(l.startDate);
+            const end = l.endDate ? new Date(l.endDate) : null;
+            return start <= now && (!end || end >= now);
+        });
+        if (!activeLease || !activeLease.tenant) return 'Vacant';
+        return `${activeLease.tenant.firstName} ${activeLease.tenant.name}`;
     }
+
+    // Helper: get rent status
+    function getRentStatus(apt: any) {
+        const activeLease = apt.leases?.find((l: any) => {
+            const now = new Date();
+            const start = new Date(l.startDate);
+            const end = l.endDate ? new Date(l.endDate) : null;
+            return start <= now && (!end || end >= now);
+        });
+        if (!activeLease) return 'N/A';
+        
+        const payments = activeLease.payments || [];
+        if (payments.length === 0) return 'Pending';
+        
+        // Sort payments by due date descending
+        const sorted = [...payments].sort((a: any, b: any) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
+        const status = sorted[0].status; // paid, pending, overdue
+        
+        if (status === 'paid') return 'Paid';
+        if (status === 'pending') return 'Pending';
+        if (status === 'overdue') return 'Late';
+        return 'Pending';
+    }
+
+    // Filtered units list
+    $: filteredApartments = apartments.filter((apt: any) => {
+        const address = apt.addressText.toLowerCase();
+        const tenant = getTenantName(apt).toLowerCase();
+        const query = searchQuery.toLowerCase();
+        return address.includes(query) || tenant.includes(query);
+    });
 </script>
 
-<div class="space-y-10">
-    <!-- Double-ledger Header -->
-    <header class="border-b-4 border-double border-border-tan pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div class="space-y-12">
+    <!-- Header Section -->
+    <header class="flex items-end justify-between border-b border-[#D6D4CD] pb-6">
         <div>
-            <h2 class="text-4xl font-serif font-bold text-charcoal tracking-tight">Property Portfolio Workspace</h2>
-            <p class="text-slate-brown italic mt-1 font-serif">Comprehensive operations & asset ledger management</p>
+            <h1 class="text-[44px] font-serif font-bold text-charcoal leading-none tracking-tight">Dashboard</h1>
         </div>
-        <div class="flex gap-3">
-            <Button variant="outline" size="md" href="/buildings">
-                <span class="material-symbols-outlined text-[18px] mr-1">domain</span>
-                View Ledger Database
+        <div>
+            <Button variant="primary" size="md" href="/buildings?add=true" class="!bg-[#0f9d58] hover:!bg-[#0d874c]">
+                <span class="material-symbols-outlined text-[20px] mr-1">add</span>
+                Add Property
             </Button>
         </div>
     </header>
 
-    <!-- Quick Actions Panel -->
-    <section class="card bg-[#FCFBF9] !p-6 border border-border-tan/80">
-        <h3 class="text-xs uppercase tracking-wider text-slate-brown font-bold mb-4 font-serif">Portfolio Quick Actions</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
-            <Button variant="secondary" size="sm" href="/buildings?add=true" class="w-full">
-                <span class="material-symbols-outlined text-md mr-1">add_home</span>
-                Add Building
-            </Button>
-            <Button variant="secondary" size="sm" href="/apartments?add=true" class="w-full">
-                <span class="material-symbols-outlined text-md mr-1">key</span>
-                Add Apartment
-            </Button>
-            <Button variant="secondary" size="sm" href="/tenants?add=true" class="w-full">
-                <span class="material-symbols-outlined text-md mr-1">person_add</span>
-                Register Tenant
-            </Button>
-            <Button variant="secondary" size="sm" href="/leases?add=true" class="w-full">
-                <span class="material-symbols-outlined text-md mr-1">assignment</span>
-                Create Lease
-            </Button>
-            <Button variant="secondary" size="sm" href="/leases" class="w-full col-span-2 sm:col-span-1">
-                <span class="material-symbols-outlined text-md mr-1">payments</span>
-                Record Payment
-            </Button>
+    <!-- Stats Grid (Borderless, Spacious style) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Total Revenue -->
+        <div class="bg-white border border-[#D6D4CD]/65 rounded-sm p-8 flex flex-col gap-2">
+            <span class="text-xs uppercase tracking-widest text-slate-brown font-bold font-sans">Total Revenue</span>
+            <span class="text-[40px] font-serif font-bold text-charcoal leading-tight">
+                ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
         </div>
-    </section>
 
-    <!-- Portfolio Occupancy Analytics -->
-    <section class="space-y-4">
-        <h3 class="text-xs uppercase tracking-wider text-slate-brown font-bold font-serif">Portfolio Occupancy Analytics</h3>
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <Card padding="sm" class="bg-white">
-                <CardHeader padding="none" class="mb-2">
-                    <CardTitle class="text-xs uppercase tracking-wider text-slate-brown">Total Units</CardTitle>
-                </CardHeader>
-                <CardContent padding="none">
-                    <p class="text-3xl font-serif font-bold text-charcoal">{totalUnits}</p>
-                </CardContent>
-            </Card>
-
-            <Card padding="sm" class="bg-white">
-                <CardHeader padding="none" class="mb-2">
-                    <CardTitle class="text-xs uppercase tracking-wider text-slate-brown">Occupied Units</CardTitle>
-                </CardHeader>
-                <CardContent padding="none">
-                    <p class="text-3xl font-serif font-bold text-primary">{occupiedUnits}</p>
-                </CardContent>
-            </Card>
-
-            <Card padding="sm" class="bg-white">
-                <CardHeader padding="none" class="mb-2">
-                    <CardTitle class="text-xs uppercase tracking-wider text-slate-brown">Vacant Units</CardTitle>
-                </CardHeader>
-                <CardContent padding="none">
-                    <p class="text-3xl font-serif font-bold text-slate-400">{vacantUnits}</p>
-                </CardContent>
-            </Card>
-
-            <Card padding="sm" class="bg-white">
-                <CardHeader padding="none" class="mb-2">
-                    <CardTitle class="text-xs uppercase tracking-wider text-slate-brown">Occupancy Rate</CardTitle>
-                </CardHeader>
-                <CardContent padding="none">
-                    <p class="text-3xl font-serif font-bold text-charcoal">{occupancyRate.toFixed(1)}%</p>
-                </CardContent>
-            </Card>
-
-            <Card padding="sm" class="bg-white">
-                <CardHeader padding="none" class="mb-2">
-                    <CardTitle class="text-xs uppercase tracking-wider text-slate-brown">Average Rent</CardTitle>
-                </CardHeader>
-                <CardContent padding="none">
-                    <p class="text-3xl font-serif font-bold text-charcoal">${avgRent.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
-                </CardContent>
-            </Card>
-
-            <Card padding="sm" class="bg-white">
-                <CardHeader padding="none" class="mb-2">
-                    <CardTitle class="text-xs uppercase tracking-wider text-slate-brown">Rev Per Unit</CardTitle>
-                </CardHeader>
-                <CardContent padding="none">
-                    <p class="text-3xl font-serif font-bold text-charcoal">${revPerUnit.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
-                </CardContent>
-            </Card>
+        <!-- Vacant Properties -->
+        <div class="bg-white border border-[#D6D4CD]/65 rounded-sm p-8 flex flex-col gap-2">
+            <span class="text-xs uppercase tracking-widest text-slate-brown font-bold font-sans">Vacant Properties</span>
+            <span class="text-[40px] font-serif font-bold text-charcoal leading-tight">
+                {vacantPropertiesCount}
+            </span>
         </div>
-    </section>
 
-    <!-- Portfolio Buildings Directory -->
-    <section class="space-y-4">
-        <h3 class="text-xs uppercase tracking-wider text-slate-brown font-bold font-serif">Property Portfolio Directory</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {#each buildings as building}
-                {@const stats = getBuildingStats(building)}
-                <Card clickable={true} href="/landlord/buildings/{building.id}" padding="none" class="flex flex-col justify-between overflow-hidden hover:!border-primary hover:shadow-md transition-all bg-white border border-border-tan">
-                    <div class="p-6 space-y-4">
-                        <!-- Card Title -->
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h4 class="text-2xl font-serif font-bold text-charcoal hover:text-primary transition-colors">{building.name}</h4>
-                                <p class="text-slate-brown text-sm font-light mt-0.5">{building.address.street} {building.address.houseNumber}, {building.address.city}</p>
-                            </div>
-                            <span class="material-symbols-outlined text-slate-brown group-hover:text-primary transition-colors">domain</span>
-                        </div>
-
-                        <!-- Occupancy Bar -->
-                        <div class="space-y-1.5">
-                            <div class="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-brown">
-                                <span>Occupancy ({stats.occupancyPct.toFixed(0)}%)</span>
-                                <span>{stats.occupied} / {stats.aptCount} Units</span>
-                            </div>
-                            <div class="w-full h-2 bg-[#F0EFEA] rounded-sm overflow-hidden flex">
-                                <div class="h-full bg-primary" style="width: {stats.occupancyPct}%"></div>
-                            </div>
-                        </div>
-
-                        <!-- Analytics Ledger Columns -->
-                        <div class="grid grid-cols-2 gap-4 pt-3 border-t border-border-tan/40">
-                            <div>
-                                <span class="text-[11px] uppercase tracking-wider text-slate-brown font-bold block">Monthly Yield</span>
-                                <span class="text-lg font-bold text-primary">+${stats.revenue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                            </div>
-                            <div class="border-l border-border-tan/40 pl-4">
-                                <span class="text-[11px] uppercase tracking-wider text-slate-brown font-bold block">Monthly Expenses</span>
-                                <span class="text-lg font-bold text-error">-${stats.expenses.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Card Footer Details -->
-                    <div class="px-6 py-4 bg-[#FCFBF9] border-t border-border-tan/40 flex justify-between items-center text-xs">
-                        <div class="flex items-center gap-1">
-                            {#if stats.openMaintenance > 0}
-                                <span class="material-symbols-outlined text-secondary text-sm">warning</span>
-                                <span class="text-secondary font-bold">{stats.openMaintenance} Open Requests</span>
-                            {:else}
-                                <span class="material-symbols-outlined text-[#006a40] text-sm">check_circle</span>
-                                <span class="text-[#006a40] font-bold">No Repairs Pending</span>
-                            {/if}
-                        </div>
-                        <span class="text-primary font-bold hover:underline flex items-center gap-0.5">
-                            Manage Property
-                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
-                        </span>
-                    </div>
-                </Card>
-            {/each}
+        <!-- Active Requests -->
+        <div class="bg-white border border-[#D6D4CD]/65 rounded-sm p-8 flex flex-col gap-2">
+            <span class="text-xs uppercase tracking-widest text-slate-brown font-bold font-sans">Active Requests</span>
+            <span class="text-[40px] font-serif font-bold text-charcoal leading-tight">
+                {activeRequestsCount}
+            </span>
         </div>
-    </section>
+    </div>
 
-    <!-- Maintenance Summary & Quick Alerts Feed -->
-    <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Maintenance Activity Card -->
-        <Card padding="md" class="md:col-span-2 bg-white border border-border-tan">
-            <CardHeader padding="none" class="pb-3 border-b border-border-tan/40 mb-4 flex justify-between items-center">
-                <div>
-                    <CardTitle class="text-sm uppercase tracking-wider text-slate-brown font-bold font-serif">Recent Portfolio Repairs</CardTitle>
-                </div>
-                <Button variant="ghost" size="xs" href="/landlord" class="!h-8">
-                    View Maintenance
-                </Button>
-            </CardHeader>
-            <CardContent padding="none">
-                {#if openMaintenanceRequests.length > 0}
-                    <div class="space-y-3">
-                        {#each openMaintenanceRequests.slice(0, 3) as req}
-                            <div class="flex justify-between items-start p-3 bg-parchment/30 border border-border-tan/30 rounded-sm">
-                                <div>
-                                    <div class="flex items-center gap-2">
-                                        <p class="font-bold text-charcoal">{req.title}</p>
-                                        {#if req.urgency === 'HIGH' || req.urgency === 'EMERGENCY'}
-                                            <span class="px-2 py-0.5 text-[10px] font-bold uppercase bg-secondary/15 text-secondary border border-secondary/20 rounded-sm">Urgent</span>
-                                        {/if}
-                                    </div>
-                                    <p class="text-xs text-slate-brown mt-0.5">
-                                        {req.apartment.building.name} - Apt {req.apartment.name} | Reported by {req.tenant.firstName} {req.tenant.name}
-                                    </p>
-                                </div>
-                                <span class="text-xs font-bold uppercase tracking-wider text-slate-brown px-2 py-1 bg-white border border-border-tan/40 rounded-sm">{req.status}</span>
-                            </div>
-                        {/each}
-                    </div>
+    <!-- Property Portfolio Section -->
+    <section class="bg-white border border-[#D6D4CD] rounded-sm overflow-hidden shadow-xs">
+        <!-- Title and Search bar -->
+        <div class="px-8 py-6 border-b border-[#D6D4CD] bg-white flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-center">
+            <h3 class="text-xl font-serif font-bold text-charcoal">Property Portfolio</h3>
+            <div class="relative w-full sm:w-64">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-brown text-[18px]">search</span>
+                <input 
+                    class="pl-10 pr-4 input !h-9 !text-[14px] w-full bg-[#f6f8f7] border-[#D6D4CD] focus:border-primary transition-all placeholder:text-slate-brown rounded-sm" 
+                    placeholder="Search properties..." 
+                    type="text" 
+                    bind:value={searchQuery}
+                />
+            </div>
+        </div>
+
+        <Table class="w-full text-left">
+            <TableHeader>
+                <TableRow hover={false} class="border-b border-[#D6D4CD]">
+                    <TableHead class="text-xs font-bold uppercase tracking-widest text-slate-brown py-4 px-8 border-b-0 w-[45%]">Address</TableHead>
+                    <TableHead class="text-xs font-bold uppercase tracking-widest text-slate-brown py-4 px-4 border-b-0 w-[20%]">Current Tenant</TableHead>
+                    <TableHead class="text-xs font-bold uppercase tracking-widest text-slate-brown py-4 px-4 border-b-0 w-[20%]">Rent Status</TableHead>
+                    <TableHead class="text-xs font-bold uppercase tracking-widest text-slate-brown py-4 px-8 border-b-0 text-right w-[15%]">Action</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {#if filteredApartments.length > 0}
+                    {#each filteredApartments as apt}
+                        {@const tenantName = getTenantName(apt)}
+                        {@const status = getRentStatus(apt)}
+                        <TableRow class="hover:bg-parchment/30 transition-colors border-b border-[#D6D4CD]/45">
+                            <TableCell class="py-5 px-8 font-sans font-semibold text-charcoal text-[16px]">
+                                {apt.addressText}
+                            </TableCell>
+                            <TableCell class="py-5 px-4 font-sans text-charcoal text-[15px]">
+                                {#if tenantName === 'Vacant'}
+                                    <span class="italic text-slate-brown/65">Vacant</span>
+                                {:else}
+                                    <span>{tenantName}</span>
+                                {/if}
+                            </TableCell>
+                            <TableCell class="py-5 px-4">
+                                {#if status === 'Paid'}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-[#e6f4ea] text-[#137333]">
+                                        <span class="size-1.5 rounded-full bg-[#137333] mr-1.5 inline-block"></span>
+                                        Paid
+                                    </span>
+                                {:else if status === 'Pending'}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-[#fef7e0] text-[#b06000]">
+                                        <span class="size-1.5 rounded-full bg-[#b06000] mr-1.5 inline-block"></span>
+                                        Pending
+                                    </span>
+                                {:else if status === 'Late'}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-[#fce8e6] text-[#c5221f]">
+                                        <span class="size-1.5 rounded-full bg-[#c5221f] mr-1.5 inline-block"></span>
+                                        Late
+                                    </span>
+                                {:else}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-[#f1f3f4] text-[#5f6368]">
+                                        N/A
+                                    </span>
+                                {/if}
+                            </TableCell>
+                            <TableCell class="py-5 px-8 text-right">
+                                <a 
+                                    href="/landlord/apartments/{apt.id}" 
+                                    class="text-[#006a40] hover:text-[#005230] font-bold text-[14px] hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded"
+                                >
+                                    View / Edit
+                                </a>
+                            </TableCell>
+                        </TableRow>
+                    {/each}
                 {:else}
-                    <div class="bg-[#FAF9F6] p-8 text-center border border-border-tan/30 text-sm text-slate-brown italic">
-                        All maintenance requests resolved.
-                    </div>
+                    <TableRow hover={false}>
+                        <TableCell colspan="4" class="px-8 py-12 text-center text-slate-brown italic bg-white">
+                            No properties match your search.
+                        </TableCell>
+                    </TableRow>
                 {/if}
-            </CardContent>
-        </Card>
-
-        <!-- Urgency Breakdown Card -->
-        <Card padding="md" class="bg-white border border-border-tan">
-            <CardHeader padding="none" class="pb-3 border-b border-border-tan/40 mb-4">
-                <CardTitle class="text-sm uppercase tracking-wider text-slate-brown font-bold font-serif">Urgency Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent padding="none">
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center p-3 border-l-4 border-secondary bg-secondary/5">
-                        <div>
-                            <p class="text-xs uppercase tracking-wider text-slate-brown font-bold">Urgent Alerts</p>
-                            <p class="text-2xl font-bold font-serif text-secondary mt-0.5">{highUrgencyRequests.length}</p>
-                        </div>
-                        <span class="material-symbols-outlined text-secondary text-3xl font-bold">warning</span>
-                    </div>
-
-                    <div class="flex justify-between items-center p-3 border-l-4 border-[#006a40] bg-[#006a40]/5">
-                        <div>
-                            <p class="text-xs uppercase tracking-wider text-slate-brown font-bold">Standard Queue</p>
-                            <p class="text-2xl font-bold font-serif text-[#006a40] mt-0.5">{normalUrgencyRequests.length}</p>
-                        </div>
-                        <span class="material-symbols-outlined text-[#006a40] text-3xl">build</span>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+            </TableBody>
+        </Table>
     </section>
 </div>
