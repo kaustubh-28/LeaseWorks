@@ -1,37 +1,73 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
-    import ListItem from './ListItem.svelte';
-    import ListItemDetail from './ListItemDetail.svelte';
     import EntityForm from './EntityForm.svelte';
+    import { 
+        Card, 
+        CardHeader, 
+        CardTitle, 
+        CardContent,
+        Table, 
+        TableHeader, 
+        TableBody, 
+        TableRow, 
+        TableCell, 
+        TableHead, 
+        TablePagination, 
+        TableEmpty, 
+        TableLoading,
+        Button 
+    } from '$lib/components';
+    import type { FormFieldSchema } from '$lib/entities';
 
-    export let title: string;
-    export let items: any[] = [];
-    export let loading: boolean = false;
-    export let basePath: string = '';
-    export let displayProperty: string = 'name';
-    export let emptyMessage: string = 'No items available';
-    export let showAddButton: boolean = true;
-    export let detailed: boolean = false;
-    export let schema: Array<{
-        name: string;
-        type: 'text' | 'number' | 'select' | 'date' | 'boolean' | 'entity-select';
-        label: string;
-        required: boolean;
-        options?: string[];
-        defaultValue?: any;
-        entityType?: string;        // Added for entity-select
-        displayProperty?: string;   // Added for entity-select
-        mutuallyExclusiveWith?: string[]; // Added for mutual exclusion
-    }> = []; // Schema provided by the page component
+    // Svelte 5 bindable props using runes
+    interface Props {
+        title: string;
+        items?: any[];
+        loading?: boolean;
+        basePath?: string;
+        displayProperty?: string;
+        emptyMessage?: string;
+        showAddButton?: boolean;
+        detailed?: boolean;
+        schema?: FormFieldSchema[];
+    }
+
+    let {
+        title,
+        items = $bindable([]),
+        loading = false,
+        basePath = '',
+        displayProperty = 'name',
+        emptyMessage = 'No items available',
+        showAddButton = true,
+        detailed = $bindable(false),
+        schema = []
+    }: Props = $props();
 
     let entityForm: EntityForm;
 
+    // Local pagination state
+    let page = $state(1);
+    let pageSize = $state(10);
+
     // Delete confirmation state
-    let showDeleteConfirm = false;
-    let itemToDelete: any = null;
+    let showDeleteConfirm = $state(false);
+    let itemToDelete = $state<any>(null);
 
     // Get entity type from basePath
-    $: entityType = basePath.split('/').filter(p => p).pop() || '';
+    const entityType = $derived(basePath.split('/').filter(p => p).pop() || '');
+
+    // Visible fields based on details toggle
+    const visibleFields = $derived(schema.filter(field => {
+        if (!detailed) {
+            // Basic view: show displayProperty and non-relationship required fields
+            return field.name === displayProperty || (field.type !== 'entity-select' && field.required);
+        }
+        return true; // Detailed view: show all fields in the schema
+    }));
+
+    // Paginated subset of items
+    const paginatedItems = $derived(items.slice((page - 1) * pageSize, page * pageSize));
 
     // Navigation function to view entity details
     function viewDetails(id: string) {
@@ -50,7 +86,6 @@
         // Format date values for the form (YYYY-MM-DD)
         const formattedItem = Object.keys(item).reduce((acc: Record<string, any>, key: string) => {
             const value = item[key];
-            // Check if the field is a valid date string
             if (value && typeof value === 'string' && !isNaN(Date.parse(value))) {
                 acc[key] = value.slice(0, 10); // Extract only the date (YYYY-MM-DD)
             } else {
@@ -113,8 +148,9 @@
         await fetchItems();
     }
 
-    function handleFormError(event: CustomEvent) {
-        alert(event.detail.message);
+    function handleFormError(event: any) {
+        const msg = event?.detail?.message || event?.message || 'Form submission failed';
+        alert(msg);
     }
 
     async function fetchItems() {
@@ -132,61 +168,148 @@
             loading = false;
         }
     }
+
+    // Dynamic relational field and generic formatting
+    function getFieldValue(item: any, field: FormFieldSchema) {
+        if (!item) return '';
+
+        if (field.type === 'entity-select' && field.entityType) {
+            // Map plural entityType to singular relation key (e.g. 'buildings' -> 'building')
+            const relationKey = field.entityType.endsWith('ies') 
+                ? field.entityType.slice(0, -3) + 'y' 
+                : field.entityType.endsWith('s') 
+                    ? field.entityType.slice(0, -1) 
+                    : field.entityType;
+
+            const relatedObj = item[relationKey];
+            if (relatedObj) {
+                return relatedObj[field.displayProperty || 'name'] || item[field.name] || '';
+            }
+            return item[field.name] || '';
+        }
+
+        const value = item[field.name];
+        if (value === null || value === undefined) return '';
+        if (field.type === 'boolean') return value ? 'Yes' : 'No';
+        if (field.type === 'date') {
+            return new Date(value).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        return String(value);
+    }
 </script>
 
-<div class="entity-list-container">
-    <div class="header">
-        <h2 class="entity-list-title">{title}</h2>
-        <div class="header-actions">
-            <label class="toggle-switch">
-                <span class="toggle-label">Details</span>
-                <input type="checkbox" bind:checked={detailed}>
-                <span class="slider"></span>
-            </label>
+<div class="w-full max-w-[1200px] mx-auto p-4 sm:p-6 md:p-8">
+    <Card padding="none" bordered={true}>
+        <CardHeader>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                <div>
+                    <CardTitle class="text-2xl font-serif text-charcoal font-bold">{title}</CardTitle>
+                </div>
+                <div class="flex flex-wrap items-center gap-6">
+                    <!-- Svelte 5 details switch -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-bold text-slate-brown uppercase tracking-wider font-sans">Details</span>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={detailed}
+                            onclick={() => detailed = !detailed}
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 {detailed ? 'bg-primary' : 'bg-[#D6D4CD]'}"
+                            aria-label="Toggle detailed view columns"
+                        >
+                            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out {detailed ? 'translate-x-5' : 'translate-x-0'}"></span>
+                        </button>
+                    </div>
 
-            {#if showAddButton}
-                <button on:click={handleAddNew} class="add-button" aria-label="Add new">
-                    +
-                </button>
+                    {#if showAddButton}
+                        <Button variant="primary" size="sm" onclick={handleAddNew} leftIcon="add">
+                            Add New
+                        </Button>
+                    {/if}
+                </div>
+            </div>
+        </CardHeader>
+
+        <CardContent>
+            {#if loading}
+                <div class="p-8">
+                    <TableLoading rows={5} cols={visibleFields.length + ($$slots['item-content'] ? 1 : 0) + 1} />
+                </div>
+            {:else if items.length === 0}
+                <div class="p-8">
+                    <TableEmpty colspan={visibleFields.length + ($$slots['item-content'] ? 1 : 0) + 1} message={emptyMessage} />
+                </div>
+            {:else}
+                <Table density="default" sticky={false}>
+                    <TableHeader>
+                        <TableRow>
+                            {#each visibleFields as field}
+                                <TableHead>{field.label}</TableHead>
+                            {/each}
+                            {#if $$slots['item-content']}
+                                <TableHead>Info</TableHead>
+                            {/if}
+                            <TableHead class="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {#each paginatedItems as item (item.id)}
+                            <!-- Triggers view details page navigation, matches original row-click -->
+                            <TableRow hover={true} onclick={() => viewDetails(item.id)} class="cursor-pointer">
+                                {#each visibleFields as field}
+                                    <TableCell>{getFieldValue(item, field)}</TableCell>
+                                {/each}
+                                {#if $$slots['item-content']}
+                                    <!-- Stops row click propagation to click handlers inside slot contents -->
+                                    <TableCell onclick={(e: MouseEvent) => e.stopPropagation()}>
+                                        <slot name="item-content" {item}></slot>
+                                    </TableCell>
+                                {/if}
+                                <!-- Actions cell stops row click propagation -->
+                                <TableCell class="text-right" onclick={(e: MouseEvent) => e.stopPropagation()}>
+                                    <div class="flex justify-end items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="xs"
+                                            onclick={() => handleEditItem(item)}
+                                            leftIcon="edit"
+                                            aria-label="Edit item"
+                                        />
+                                        <Button
+                                            variant="danger"
+                                            size="xs"
+                                            onclick={() => handleDeleteItem(item)}
+                                            leftIcon="delete"
+                                            aria-label="Delete item"
+                                        />
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        {/each}
+                    </TableBody>
+                </Table>
+
+                <!-- Dynamic table pagination footer -->
+                <div class="px-8 pb-6">
+                    <TablePagination
+                        page={page}
+                        pageSize={pageSize}
+                        totalItems={items.length}
+                        onpagechange={(p) => page = p}
+                        onpagesizechange={(ps) => { pageSize = ps; page = 1; }}
+                    />
+                </div>
             {/if}
-        </div>
-    </div>
-
-    {#if loading}
-        <div class="loading-container">
-            <p>Loading...</p>
-        </div>
-    {:else if items.length === 0}
-        <p class="empty-message">{emptyMessage}</p>
-    {:else}
-        <ul class="entity-list">
-            {#each items as item (item.id)}
-                {#if detailed}
-                    <ListItemDetail
-                        {item}
-                        {displayProperty}
-                        on:click={() => viewDetails(item.id)}
-                        on:edit={() => handleEditItem(item)}
-                        on:delete={() => handleDeleteItem(item)}
-                    >
-                        <slot name="item-content" {item}></slot>
-                    </ListItemDetail>
-                {:else}
-                    <ListItem
-                        {item}
-                        {displayProperty}
-                        on:click={() => viewDetails(item.id)}
-                        on:edit={() => handleEditItem(item)}
-                        on:delete={() => handleDeleteItem(item)}
-                    >
-                        <slot name="item-content" {item}></slot>
-                    </ListItem>
-                {/if}
-            {/each}
-        </ul>
-    {/if}
+        </CardContent>
+    </Card>
 </div>
 
+<!-- Modal Form Dialog -->
 <EntityForm
     bind:this={entityForm}
     {entityType}
@@ -194,215 +317,26 @@
     initialData={{}}
     isOpen={false}
     apiBasePath={`/api/${entityType}`}
-    on:submit={handleFormSubmit}
-    on:error={handleFormError}
+    onsubmit={handleFormSubmit}
+    onerror={handleFormError}
 />
 
-<!-- Delete confirmation modal -->
+<!-- Double-ledger styled Delete Confirmation Modal -->
 {#if showDeleteConfirm}
-    <div class="modal-overlay">
-        <div class="modal-content">
-            <h3>Confirm Delete</h3>
-            <p>Are you sure you want to delete {itemToDelete?.[displayProperty]}?</p>
-            <p class="warning">This action cannot be undone.</p>
-            <div class="modal-actions">
-                <button class="cancel-button" on:click={cancelDelete}>Cancel</button>
-                <button class="delete-button" on:click={confirmDelete}>Delete</button>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs">
+        <button class="absolute inset-0 bg-transparent w-full h-full border-none outline-none cursor-default" onclick={cancelDelete} aria-label="Close confirmation dialog"></button>
+        <div class="bg-white border border-border-tan rounded-sm shadow-xl p-8 max-w-sm w-full relative z-10 space-y-5">
+            <h3 class="text-xl font-bold font-serif text-charcoal">Confirm Delete</h3>
+            <p class="text-sm text-slate-brown leading-relaxed">
+                Are you sure you want to delete <span class="font-bold text-charcoal">{itemToDelete?.[displayProperty]}</span>?
+            </p>
+            <p class="text-xs font-bold text-error uppercase tracking-wider">
+                This action cannot be undone.
+            </p>
+            <div class="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onclick={cancelDelete}>Cancel</Button>
+                <Button variant="danger" onclick={confirmDelete}>Delete</Button>
             </div>
         </div>
     </div>
 {/if}
-
-<style>
-    .entity-list-container {
-        padding: 20px;
-        background-color: #f9f9f9;
-        border-radius: 8px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        max-width: 800px;
-        margin: 0 auto;
-    }
-
-    .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        padding-right: 30px;
-        border-bottom: 1px solid #e0e0e0;
-    }
-
-    .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .entity-list-title {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #333;
-        margin: 0;
-        padding: 0;
-        line-height: 1;
-    }
-
-    .add-button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 35px;
-        height: 30px;
-        border-radius: 25%;
-        background-color: white;
-        border: 1px solid #e0e0e0;
-        cursor: pointer;
-        color: #333;
-        transition: all 0.2s ease;
-        padding: 15px;
-        font-size: 1.5rem;
-    }
-
-    .add-button:hover {
-        background-color: rgba(79, 70, 229, 0.1);
-        transform: translateY(-2px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-
-    .entity-list {
-        list-style-type: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .loading-container {
-        display: flex;
-        justify-content: center;
-        padding: 2rem 0;
-    }
-
-    .empty-message {
-        text-align: center;
-        padding: 2rem 0;
-        color: #666;
-    }
-
-    /* Toggle Switch Styles */
-    .toggle-switch {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        cursor: pointer;
-    }
-
-    .toggle-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-
-    .slider {
-        position: relative;
-        display: inline-block;
-        width: 40px;
-        height: 20px;
-        background-color: #ccc;
-        border-radius: 34px;
-        transition: .4s;
-    }
-
-    .slider:before {
-        position: absolute;
-        content: "";
-        height: 16px;
-        width: 16px;
-        left: 2px;
-        bottom: 2px;
-        background-color: white;
-        border-radius: 50%;
-        transition: .4s;
-    }
-
-    input:checked + .slider {
-        background-color: #4F46E5;
-    }
-
-    input:checked + .slider:before {
-        transform: translateX(20px);
-    }
-
-    .toggle-label {
-        margin-right: 8px;
-        font-size: 0.85rem;
-        color: #333;
-    }
-
-    /* Modal styles */
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-    }
-
-    .modal-content {
-        background-color: white;
-        padding: 24px;
-        border-radius: 8px;
-        width: 90%;
-        max-width: 400px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-
-    .modal-content h3 {
-        margin-top: 0;
-        font-size: 1.25rem;
-        color: #333;
-    }
-
-    .warning {
-        color: #E53E3E;
-        font-weight: 500;
-    }
-
-    .modal-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 12px;
-        margin-top: 24px;
-    }
-
-    .cancel-button {
-        padding: 8px 16px;
-        background-color: #f3f4f6;
-        border: 1px solid #d1d5db;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 500;
-    }
-
-    .cancel-button:hover {
-        background-color: #e5e7eb;
-    }
-
-    .delete-button {
-        padding: 8px 16px;
-        background-color: #E53E3E;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 500;
-    }
-
-    .delete-button:hover {
-        background-color: #C53030;
-    }
-</style>

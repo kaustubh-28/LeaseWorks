@@ -2,22 +2,11 @@
     export let title: string;
 </script>
 
-<div class="detail-section">
-    <h3>{title}</h3>
-    <slot></slot>
+<div class="mb-6 font-sans">
+    <h3 class="text-[20px] font-serif font-bold text-charcoal mb-4 pb-1.5 border-b-2 border-double border-border-tan">
+        {title}
+    </h3>
+    <div class="space-y-3">
+        <slot></slot>
+    </div>
 </div>
-
-<style>
-    .detail-section {
-        margin-bottom: 15px;
-    }
-
-    h3 {
-        font-size: 20px; /* Increase font size */
-        color: #333;
-        margin-bottom: 10px;
-        font-weight: bold; /* Make the text bold */
-        border-bottom: 2px solid #e0e0e0; /* Add a bottom border */
-        padding-bottom: 5px; /* Add padding to the bottom */
-    }
-</style>

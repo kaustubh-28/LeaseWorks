@@ -1,66 +1,160 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import EntityForm from './EntityForm.svelte';
+    import { 
+        Card, 
+        CardHeader, 
+        CardContent, 
+        CardFooter, 
+        CardTitle,
+        Button 
+    } from '$lib/components';
 
-    // Properties
-    export let title: string = 'Detail View';
-    export let loading: boolean = false;
-    export let entityType: string = '';
-    export let schema: any[] = [];
-    export let entity: any = null;
+    // Svelte 5 Props using interface
+    interface Props {
+        title?: string;
+        loading?: boolean;
+        entityType?: string;
+        schema?: any[];
+        entity?: any;
+    }
+
+    let {
+        title = 'Detail View',
+        loading = false,
+        entityType = '',
+        schema = [],
+        entity = null
+    }: Props = $props();
 
     let entityForm: EntityForm;
+    let showDeleteConfirm = $state(false);
+    let processingDelete = $state(false);
 
-    // Open the edit form for the current entity
     function onEdit() {
         if (entityForm && entity) {
             entityForm.openForm(entity, true);
         }
     }
 
-    // Refresh the page after successful form submission
     async function handleFormSubmit() {
         window.location.reload();
     }
 
-    // Handle form submission errors
-    function handleFormError(event: CustomEvent) {
-        console.error('Form error:', event.detail.message);
+    function handleFormError(event: any) {
+        const msg = event?.detail?.message || event?.message || 'Update failed';
+        console.error('Form error:', msg);
+        alert(msg);
     }
 
     function goBack() {
         goto('/' + entityType);
     }
+
+    function handleDeleteClick() {
+        showDeleteConfirm = true;
+    }
+
+    async function confirmDelete() {
+        if (!entity || !entity.id) return;
+        processingDelete = true;
+        
+        try {
+            const response = await fetch(`/api/${entityType}/${entity.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                showDeleteConfirm = false;
+                goto('/' + entityType);
+            } else {
+                let errorMessage = 'Failed to delete record';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    errorMessage = response.statusText || errorMessage;
+                }
+                alert(`Error: ${errorMessage}`);
+            }
+        } catch (error) {
+            console.error('Error deleting record:', error);
+            alert('An unexpected error occurred.');
+        } finally {
+            processingDelete = false;
+        }
+    }
+
+    function cancelDelete() {
+        showDeleteConfirm = false;
+    }
 </script>
 
-<div class="detail-container">
-    <div class="header">
-        <button on:click={goBack} class="back-button">&#8592;</button>
-        <h2 class="title">{title}</h2>
-        <button class="edit-button" on:click={onEdit} aria-label="Edit">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-        </button>
-    </div>
-
-    {#if loading}
-        <div class="flex justify-center items-center h-64">
-            <p>Loading details...</p>
-        </div>
-    {:else}
-        <div class="detail-content">
-            <slot name="graphic"></slot>
-            <div class="content-main">
-                <slot></slot>
+<div class="w-full max-w-[1000px] mx-auto p-4 sm:p-6 md:p-8">
+    <Card padding="none" bordered={true}>
+        <!-- Card Header with Back navigation & Title -->
+        <CardHeader>
+            <div class="flex items-center justify-between w-full">
+                <div class="flex items-center gap-3">
+                    <Button variant="secondary" size="sm" onclick={goBack} leftIcon="arrow_back" aria-label="Go back" />
+                    <CardTitle class="text-2xl font-serif text-charcoal font-bold">{title}</CardTitle>
+                </div>
             </div>
-        </div>
-    {/if}
+        </CardHeader>
+
+        <!-- Card Content holding the graphics & fields -->
+        <CardContent>
+            {#if loading}
+                <div class="flex justify-center items-center py-20 font-sans text-slate-brown gap-2">
+                    <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+                    Loading details...
+                </div>
+            {:else}
+                <div class="flex flex-col md:flex-row items-stretch border-t border-border-tan/50 bg-[#FAF9F6]">
+                    <!-- Left column graphic slot -->
+                    {#if $$slots['graphic']}
+                        <div class="md:w-[280px] p-8 border-b md:border-b-0 md:border-r border-border-tan/50 bg-white flex items-center justify-center shrink-0">
+                            <slot name="graphic"></slot>
+                        </div>
+                    {/if}
+                    
+                    <!-- Right column details slot -->
+                    <div class="flex-1 p-8 space-y-6">
+                        <slot></slot>
+                    </div>
+                </div>
+            {/if}
+        </CardContent>
+
+        <!-- Separated action footer -->
+        <CardFooter bordered={true}>
+            <div class="flex items-center justify-between w-full p-6">
+                <!-- Destructive Delete Action -->
+                <div>
+                    {#if entity && !loading}
+                        <Button variant="danger" onclick={handleDeleteClick} leftIcon="delete">
+                            Delete Record
+                        </Button>
+                    {/if}
+                </div>
+
+                <!-- Primary Edit Action -->
+                <div>
+                    {#if entity && !loading}
+                        <Button variant="primary" onclick={onEdit} leftIcon="edit">
+                            Edit Details
+                        </Button>
+                    {/if}
+                </div>
+            </div>
+        </CardFooter>
+    </Card>
 </div>
 
-<!-- Entity Form for editing -->
+<!-- Modal Form for Editing -->
 <EntityForm
     bind:this={entityForm}
     {entityType}
@@ -68,77 +162,26 @@
     initialData={{}}
     isOpen={false}
     apiBasePath={`/api/${entityType}`}
-    on:submit={handleFormSubmit}
-    on:error={handleFormError}
+    onsubmit={handleFormSubmit}
+    onerror={handleFormError}
 />
 
-<style>
-    .detail-container {
-        padding: 20px;
-        background-color: #f9f9f9;
-        border-radius: 8px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        max-width: 800px;
-        margin: 0 auto;
-    }
-
-    .header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e0e0e0;
-    }
-
-    .back-button {
-        margin-right: 15px;
-        font-size: 20px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 0;
-        line-height: 1;
-        display: flex;
-        align-items: center;
-    }
-
-    .edit-button {
-        margin-left: auto;
-        font-size: 1.2rem;
-        background-color: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 25%;
-        cursor: pointer;
-        padding: 10px;
-        transition: all 0.2s ease;
-        margin-right: 30px;
-    }
-
-    .edit-button:hover {
-        background-color: rgba(79, 70, 229, 0.1);
-        transform: translateY(-2px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-
-    .title {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #333;
-        margin: 0;
-        padding: 0;
-        line-height: 1;
-    }
-
-    .detail-content {
-        display: flex;
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 20px;
-    }
-
-    .content-main {
-        flex: 1;
-        min-width: 0;
-        padding: 30px;
-    }
-</style>
+<!-- Double-ledger styled Delete Confirmation Modal -->
+{#if showDeleteConfirm}
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs">
+        <button class="absolute inset-0 bg-transparent w-full h-full border-none outline-none cursor-default" onclick={cancelDelete} aria-label="Close confirmation dialog"></button>
+        <div class="bg-white border border-border-tan rounded-sm shadow-xl p-8 max-w-sm w-full relative z-10 space-y-5">
+            <h3 class="text-xl font-bold font-serif text-charcoal">Confirm Delete</h3>
+            <p class="text-sm text-slate-brown leading-relaxed">
+                Are you sure you want to delete this record from <span class="font-bold text-charcoal">{entityType}</span>?
+            </p>
+            <p class="text-xs font-bold text-error uppercase tracking-wider">
+                This action cannot be undone and will delete the record permanently.
+            </p>
+            <div class="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onclick={cancelDelete}>Cancel</Button>
+                <Button variant="danger" onclick={confirmDelete} loading={processingDelete}>Delete</Button>
+            </div>
+        </div>
+    </div>
+{/if}

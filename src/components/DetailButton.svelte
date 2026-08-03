@@ -1,8 +1,8 @@
 <script lang="ts">
-    import {goto} from '$app/navigation';
+    import { goto } from '$app/navigation';
 
-    export let href: string = ''; // URL to navigate to when item is clicked
-    export let clickable: boolean = false; // Whether this item should be clickable
+    export let href: string = ''; // URL to navigate to when clicked
+    export let clickable: boolean = false; // Whether it is clickable
 
     function handleClick() {
         if (clickable && href) {
@@ -11,34 +11,12 @@
     }
 </script>
 
-<button class="detail-item {clickable ? 'clickable' : ''}" on:click={handleClick} disabled={!clickable}>
-    <slot></slot>
+<button 
+    class="w-full text-left bg-white p-4 border border-border-tan/70 rounded-sm font-sans text-charcoal shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 {clickable ? 'cursor-pointer hover:border-primary/80 hover:bg-[#FAF9F6]' : 'cursor-default'}" 
+    onclick={handleClick} 
+    disabled={!clickable}
+>
+    <div class="space-y-1">
+        <slot></slot>
+    </div>
 </button>
-
-<style>
-    .detail-item {
-        background-color: #fff;
-        padding: 10px;
-        margin: 5px 0;
-        border-radius: 4px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        border: none;
-        text-align: left;
-        width: 100%;
-    }
-
-    .clickable {
-        cursor: pointer;
-        transition: background-color 0.2s, transform 0.1s;
-    }
-
-    .clickable:hover {
-        background-color: #f5f5f5;
-        transform: translateY(-2px);
-        color: black;
-    }
-
-    .clickable:active {
-        transform: translateY(0);
-    }
-</style>

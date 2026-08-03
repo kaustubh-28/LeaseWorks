@@ -1,40 +1,50 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
     import type { FormFieldSchema } from '$lib/entities';
+    import { Button } from '$lib/components';
 
     const dispatch = createEventDispatcher();
 
-    // Properties for the form
-    export let entityType: string; // Name of the entity type (e.g., "Building")
-    export let schema: FormFieldSchema[] = []; // Schema definition passed from parent
-    export let initialData: any = {}; // Optional initial data for editing
-    export let isOpen: boolean = false; // Control visibility of popup
-    export let isEditing: boolean = false; // Whether we're editing
-    export let apiBasePath: string = ''; // API base path for entity operations
-
-    // Form state management
-    let formData: any = { ...initialData };
-    let validationErrors: { [key: string]: string } = {};
-    let errorMessage: string | null = null; // Error message from form submission
-    let processing: boolean = false;
-    let relatedEntities: { [key: string]: any[] } = {}; // Store for related entity options
-    let activeMutualExclusionGroups: { [key: string]: string } = {}; // Track active mutual exclusion groups
-
-    // --- Lifecycle Functions ---
-
-    // Reset form when initialData changes
-    $: if (initialData && Object.keys(initialData).length > 0) {
-        formData = { ...initialData };
+    // Svelte 5 props definition
+    interface Props {
+        entityType: string;
+        schema?: FormFieldSchema[];
+        initialData?: any;
+        isOpen?: boolean;
+        isEditing?: boolean;
+        apiBasePath?: string;
+        onsubmit?: (eventData: any) => void;
+        onerror?: (errorData: any) => void;
+        onclose?: () => void;
     }
 
-    // Fetch related entities when the form opens
-    $: if (isOpen && schema) {
-        loadRelatedEntities();
-    }
+    let {
+        entityType,
+        schema = [],
+        initialData = {},
+        isOpen = $bindable(false),
+        isEditing = $bindable(false),
+        apiBasePath = '',
+        onsubmit,
+        onerror,
+        onclose
+    }: Props = $props();
 
-    // Initialize form fields with default values
-    $: {
-        if (schema) {
+    // Svelte 5 state variables
+    let formData = $state<any>({});
+    let validationErrors = $state<Record<string, string>>({});
+    let errorMessage = $state<string | null>(null);
+    let processing = $state(false);
+    let relatedEntities = $state<Record<string, any[]>>({});
+
+    // Fetch related entities and initialize values when form opens
+    $effect(() => {
+        if (isOpen) {
+            errorMessage = null;
+            validationErrors = {};
+            formData = { ...initialData };
+            
+            // Set defaults for any missing fields in schema
             schema.forEach(field => {
                 if (formData[field.name] === undefined) {
                     if (field.defaultValue !== undefined) {
@@ -44,16 +54,13 @@
                     }
                 }
             });
+
+            loadRelatedEntities();
         }
-    }
+    });
 
-    // --- Public API Functions (exported) ---
+    // --- Public API Functions (exported for parent components) ---
 
-    /**
-     * Opens the form for creating or editing an entity
-     * @param data Initial data for the form
-     * @param editing Whether this is an edit operation
-     */
     export function openForm(data: any = {}, editing: boolean = false) {
         formData = { ...data };
         isEditing = editing;
@@ -62,17 +69,10 @@
         validationErrors = {};
     }
 
-    /**
-     * Closes the form
-     */
     export function closeForm() {
         closePopup();
     }
 
-    /**
-     * Submit the form programmatically
-     * @returns Promise<boolean> Whether the submission was successful
-     */
     export async function submitForm(): Promise<boolean> {
         if (!validateForm()) {
             return false;
@@ -82,63 +82,50 @@
 
     // --- Core Form Operations ---
 
-    /**
-     * Get the API endpoint for the entity
-     */
     function getApiEndpoint() {
         const basePath = apiBasePath || `/api/${entityType}`;
         return isEditing && formData.id ? `${basePath}/${formData.id}` : basePath;
     }
 
-    /**
-     * Load all related entities needed for entity-select fields
-     */
     async function loadRelatedEntities() {
         const entityTypes = new Set<string>();
 
-        // Find all unique entity types needed
         schema.forEach(field => {
             if (field.type === 'entity-select' && field.entityType) {
                 entityTypes.add(field.entityType);
             }
         });
 
-        // Fetch each entity type
-        for (const entityType of entityTypes) {
+        for (const targetType of entityTypes) {
             try {
-                const response = await fetch(`/api/${entityType}`);
+                const response = await fetch(`/api/${targetType}`);
                 if (response.ok) {
-                    relatedEntities[entityType] = await response.json();
+                    relatedEntities[targetType] = await response.json();
                 } else {
-                    console.error(`Failed to fetch ${entityType}`);
+                    console.error(`Failed to fetch related ${targetType}`);
                 }
             } catch (error) {
-                console.error(`Error fetching ${entityType}:`, error);
+                console.error(`Error fetching related ${targetType}:`, error);
             }
         }
-
-        // Force a UI update
-        relatedEntities = { ...relatedEntities };
     }
 
-    /**
-     * Close popup and reset data
-     */
     function closePopup() {
-        formData = isEditing ? { ...initialData } : {};
+        formData = {};
         validationErrors = {};
         errorMessage = null;
         isOpen = false;
         dispatch('close');
+        onclose?.();
     }
 
-    /**
-     * Create or update entity using the API
-     */
     async function saveEntity(): Promise<boolean> {
         try {
             processing = true;
+            errorMessage = null;
             const endpoint = getApiEndpoint();
+            
+            // Use PUT for editing details, POST for creating new rows
             const method = isEditing ? 'PUT' : 'POST';
 
             const response = await fetch(endpoint, {
@@ -150,15 +137,16 @@
             });
 
             if (response.ok) {
-                const data = await response.json();
-                dispatch('submit', {
-                    data: data || formData,
+                const responseData = await response.json();
+                const eventPayload = {
+                    data: responseData || formData,
                     isEditing,
                     success: true
-                });
+                };
+                dispatch('submit', eventPayload);
+                onsubmit?.(eventPayload);
                 return true;
             } else {
-                // Extract error message
                 let message = 'Unknown error occurred';
                 try {
                     const errorData = await response.json();
@@ -168,45 +156,33 @@
                 }
                 errorMessage = message;
                 dispatch('error', { message });
+                onerror?.({ message });
                 return false;
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : 'An unexpected error occurred';
             errorMessage = message;
             dispatch('error', { message });
+            onerror?.({ message });
             return false;
         } finally {
             processing = false;
         }
     }
 
-    /**
-     * Handle form submission
-     */
     async function handleSubmit() {
-        try {
-            // Validate form
-            if (!validateForm()) {
-                return;
-            }
+        if (!validateForm()) {
+            return;
+        }
 
-            // Save entity
-            const success = await saveEntity();
-            if (success) {
-                closePopup();
-            }
-        } catch (error) {
-            console.error(`Error in form submission:`, error);
-            errorMessage = 'An unexpected error occurred';
-            dispatch('error', { message: errorMessage });
+        const success = await saveEntity();
+        if (success) {
+            closePopup();
         }
     }
 
-    // --- Validation Functions ---
+    // --- Dynamic Schema Validation ---
 
-    /**
-     * Validate a single field
-     */
     function validateField(fieldName: string, field: FormFieldSchema): string | null {
         const value = formData[fieldName];
 
@@ -218,9 +194,7 @@
             return `${field.label} must be a number`;
         }
 
-        // Special validation for mutually exclusive fields
         if (field.mutuallyExclusiveWith && field.mutuallyExclusiveWith.length > 0) {
-            // Check if at least one field in the mutually exclusive group has a value
             const hasValue = [field.name, ...field.mutuallyExclusiveWith].some(
                 name => formData[name] !== undefined && formData[name] !== '' && formData[name] !== null
             );
@@ -233,9 +207,6 @@
         return null;
     }
 
-    /**
-     * Validate all fields
-     */
     function validateForm(): boolean {
         validationErrors = {};
         let isValid = true;
@@ -248,16 +219,14 @@
             }
         });
 
-        // Special validation for mutually exclusive groups
+        // Mutually exclusive checking
         const mutualGroups = getMutuallyExclusiveGroups();
         for (const group of mutualGroups) {
-            // Check if exactly one field in each group has a value
             const fieldsWithValues = group.filter(
                 name => formData[name] !== undefined && formData[name] !== '' && formData[name] !== null
             );
 
             if (group.some(name => schema.find(f => f.name === name)?.required) && fieldsWithValues.length === 0) {
-                // If any field in the group is required, ensure at least one has a value
                 group.forEach(name => {
                     validationErrors[name] = `One of these related fields must be provided`;
                 });
@@ -268,9 +237,6 @@
         return isValid;
     }
 
-    /**
-     * Get all mutually exclusive groups
-     */
     function getMutuallyExclusiveGroups(): string[][] {
         const groups: string[][] = [];
         const processedFields = new Set<string>();
@@ -279,8 +245,6 @@
             if (field.mutuallyExclusiveWith && !processedFields.has(field.name)) {
                 const group = [field.name, ...field.mutuallyExclusiveWith];
                 groups.push(group);
-
-                // Mark all fields in this group as processed
                 group.forEach(name => processedFields.add(name));
             }
         });
@@ -288,35 +252,15 @@
         return groups;
     }
 
-    // --- Event Handlers ---
-
-    /**
-     * Handle field mutual exclusion
-     */
     function handleMutualExclusion(fieldName: string, value: any) {
         const field = schema.find(f => f.name === fieldName);
-
         if (field?.mutuallyExclusiveWith && value) {
             field.mutuallyExclusiveWith.forEach(exclusiveField => {
-                // Clear the value of mutually exclusive fields
                 formData[exclusiveField] = '';
             });
         }
     }
 
-    /**
-     * Handle value change for a field
-     */
-    function handleValueChange(fieldName: string, value: any) {
-        formData[fieldName] = value;
-
-        // Check for mutual exclusion
-        handleMutualExclusion(fieldName, value);
-    }
-
-    /**
-     * Modal click outside detection
-     */
     function handleBackdropClick(event: MouseEvent) {
         if (event.target === event.currentTarget) {
             closePopup();
@@ -325,76 +269,107 @@
 </script>
 
 {#if isOpen}
-    <div class="popup-backdrop" on:click={handleBackdropClick}>
-        <div class="popup-container" on:click|stopPropagation>
-            <div class="popup-header">
-                <h2 class="popup-title">
+    <!-- Overlay backdrop -->
+    <div 
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs overflow-y-auto"
+        onclick={handleBackdropClick}
+        role="presentation"
+    >
+        <!-- Modal Card Content -->
+        <div 
+            class="bg-white border border-border-tan rounded-sm shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col relative z-10"
+            onclick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+        >
+            <!-- Modal Header -->
+            <div class="px-8 py-5 border-b border-border-tan bg-[#FAF9F6] flex justify-between items-center rounded-t-sm">
+                <h2 class="text-xl font-serif font-bold text-charcoal">
                     {isEditing ? `Edit ${entityType}` : `New ${entityType}`}
                 </h2>
-                <button class="close-button" on:click={closePopup}>×</button>
+                <button 
+                    class="text-slate-brown hover:text-charcoal transition-colors bg-transparent border-none p-0 flex items-center justify-center cursor-pointer" 
+                    onclick={closePopup}
+                    aria-label="Close form"
+                >
+                    <span class="material-symbols-outlined text-[24px]">close</span>
+                </button>
             </div>
 
+            <!-- Validation Error Alert Banner -->
             {#if errorMessage}
-                <div class="error-message">
-                    {errorMessage}
+                <div class="mx-8 mt-6 p-4 bg-status-error-bg/20 border border-status-error-text/20 rounded-sm text-status-error-text text-sm font-semibold flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[20px]">error</span>
+                    <span>{errorMessage}</span>
                 </div>
             {/if}
 
-            <form on:submit|preventDefault={handleSubmit} class="entity-form">
+            <!-- Dynamic Input Form Body -->
+            <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="p-8 space-y-6 overflow-y-auto flex-1 font-sans text-[16px]">
                 {#each schema as field}
-                    <div class="form-field">
-                        <label for={field.name} class="form-label">
+                    <div class="flex flex-col gap-1.5 text-left">
+                        <label for={field.name} class="text-xs uppercase font-bold tracking-wider text-slate-brown flex items-center gap-1">
                             {field.label}
                             {#if field.required}
-                                <span class="required-asterisk">*</span>
+                                <span class="text-error font-bold">*</span>
                             {/if}
                         </label>
 
                         {#if field.type === 'entity-select'}
-                            <select
-                                id={field.name}
-                                bind:value={formData[field.name]}
-                                required={field.required}
-                                on:change={() => handleMutualExclusion(field.name, formData[field.name])}
-                                class="form-input {validationErrors[field.name] ? 'input-error' : ''}"
-                                disabled={field.mutuallyExclusiveWith && field.mutuallyExclusiveWith.some(exclusiveField => formData[exclusiveField])}
-                            >
-                                <option value="">-No {field.label} Selected-</option>
-                                {#if field.entityType && relatedEntities[field.entityType]}
-                                    {#each relatedEntities[field.entityType] as entity}
-                                        <option value={entity.id}>
-                                            {field.displayProperty ? entity[field.displayProperty] : entity.id}
-                                        </option>
-                                    {/each}
-                                {/if}
-                            </select>
+                            <div class="relative">
+                                <select
+                                    id={field.name}
+                                    bind:value={formData[field.name]}
+                                    required={field.required}
+                                    onchange={() => handleMutualExclusion(field.name, formData[field.name])}
+                                    class="select pr-10 appearance-none {validationErrors[field.name] ? 'border-error ring-1 ring-error' : ''}"
+                                    disabled={field.mutuallyExclusiveWith && field.mutuallyExclusiveWith.some(exField => formData[exField])}
+                                >
+                                    <option value="">- No {field.label} Selected -</option>
+                                    {#if field.entityType && relatedEntities[field.entityType]}
+                                        {#each relatedEntities[field.entityType] as related}
+                                            <option value={related.id}>
+                                                {field.displayProperty ? related[field.displayProperty] : related.id}
+                                            </option>
+                                        {/each}
+                                    {/if}
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-brown">
+                                    <span class="material-symbols-outlined text-lg">expand_more</span>
+                                </div>
+                            </div>
                         {:else if field.type === 'select' && field.options}
-                            <select
-                                id={field.name}
-                                bind:value={formData[field.name]}
-                                required={field.required}
-                                class="form-input {validationErrors[field.name] ? 'input-error' : ''}"
-                            >
-                                <option value="">-Select {field.label}-</option>
-                                {#each field.options as option}
-                                    <option value={option}>{option}</option>
-                                {/each}
-                            </select>
+                            <div class="relative">
+                                <select
+                                    id={field.name}
+                                    bind:value={formData[field.name]}
+                                    required={field.required}
+                                    class="select pr-10 appearance-none {validationErrors[field.name] ? 'border-error ring-1 ring-error' : ''}"
+                                >
+                                    <option value="">- Select {field.label} -</option>
+                                    {#each field.options as option}
+                                        <option value={option}>{option}</option>
+                                    {/each}
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-brown">
+                                    <span class="material-symbols-outlined text-lg">expand_more</span>
+                                </div>
+                            </div>
                         {:else if field.type === 'date'}
                             <input
                                 type="date"
                                 id={field.name}
                                 bind:value={formData[field.name]}
                                 required={field.required}
-                                class="form-input {validationErrors[field.name] ? 'input-error' : ''}"
+                                class="input {validationErrors[field.name] ? 'border-error ring-1 ring-error' : ''}"
                             />
                         {:else if field.type === 'boolean'}
-                            <div class="checkbox-container">
+                            <div class="flex items-center h-12">
                                 <input
                                     type="checkbox"
                                     id={field.name}
                                     bind:checked={formData[field.name]}
-                                    class="form-checkbox"
+                                    class="size-5 border border-border-tan rounded-sm accent-primary bg-white text-primary cursor-pointer"
                                 />
                             </div>
                         {:else}
@@ -403,215 +378,31 @@
                                 id={field.name}
                                 bind:value={formData[field.name]}
                                 required={field.required}
-                                class="form-input {validationErrors[field.name] ? 'input-error' : ''}"
+                                class="input {validationErrors[field.name] ? 'border-error ring-1 ring-error' : ''}"
                                 step={field.type === 'number' ? (field.step || '1') : undefined}
+                                placeholder="Enter {field.label.toLowerCase()}..."
                             />
                         {/if}
 
                         {#if validationErrors[field.name]}
-                            <div class="field-error">{validationErrors[field.name]}</div>
+                            <span class="text-error text-xs font-semibold mt-1 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm">warning</span>
+                                {validationErrors[field.name]}
+                            </span>
                         {/if}
                     </div>
                 {/each}
 
-                <div class="form-actions">
-                    <button type="button" class="cancel-button" on:click={closePopup}>
+                <!-- Form Bottom Action buttons using Button component -->
+                <div class="flex justify-end gap-3 pt-6 border-t border-border-tan/50">
+                    <Button variant="secondary" onclick={closePopup}>
                         Cancel
-                    </button>
-                    <button type="submit" class="submit-button" disabled={processing}>
+                    </Button>
+                    <Button type="submit" variant="primary" loading={processing}>
                         {isEditing ? 'Update' : 'Create'} {entityType}
-                    </button>
+                    </Button>
                 </div>
             </form>
         </div>
     </div>
 {/if}
-
-<style>
-    .popup-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-    }
-
-    .popup-container {
-        background-color: white;
-        border-radius: 8px;
-        width: 90%;
-        max-width: 500px;
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-        animation: slide-in 0.3s ease-out;
-    }
-
-    .popup-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 15px 20px;
-        border-bottom: 1px solid #e0e0e0;
-        background-color: #f8f8f8;
-        border-radius: 8px 8px 0 0;
-    }
-
-    .popup-title {
-        margin: 0;
-        font-size: 1.25rem;
-        color: #333;
-    }
-
-    .close-button {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: #666;
-        padding: 0;
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: color 0.2s;
-    }
-
-    .close-button:hover {
-        color: #333;
-    }
-
-    .entity-form {
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
-
-    .form-field {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-    }
-
-    .form-label {
-        font-weight: 500;
-        color: #333;
-        font-size: 0.95rem;
-    }
-
-    .required-asterisk {
-        color: red;
-        margin-left: 4px;
-    }
-
-    .form-input {
-        padding: 8px 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 0.95rem;
-        background-color: #f9f9f9;
-        transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    .form-input:focus {
-        border-color: #4F46E5;
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
-    }
-
-    .form-input:disabled {
-        background-color: #e9e9e9;
-        cursor: not-allowed;
-        color: #777;
-    }
-
-    .input-error {
-        border-color: #e53e3e;
-    }
-
-    .field-error {
-        color: #e53e3e;
-        font-size: 0.8rem;
-        margin-top: 2px;
-    }
-
-    .checkbox-container {
-        height: 36px;
-        display: flex;
-        align-items: center;
-    }
-
-    .form-checkbox {
-        width: 18px;
-        height: 18px;
-        cursor: pointer;
-    }
-
-    .form-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-        margin-top: 10px;
-    }
-
-    .cancel-button, .submit-button {
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 500;
-        transition: all 0.2s ease;
-    }
-
-    .cancel-button {
-        background-color: #f3f4f6;
-        color: #374151;
-        border: 1px solid #d1d5db;
-    }
-
-    .submit-button {
-        background-color: #4F46E5;
-        color: white;
-        border: none;
-    }
-
-    .submit-button:disabled {
-        background-color: #9CA3AF;
-        cursor: not-allowed;
-    }
-
-    .cancel-button:hover {
-        background-color: #e5e7eb;
-    }
-
-    .submit-button:hover:not(:disabled) {
-        background-color: #4338ca;
-    }
-
-    .error-message {
-        margin: 10px 20px 0;
-        padding: 8px 12px;
-        background-color: #fee2e2;
-        border: 1px solid #fecaca;
-        border-radius: 4px;
-        color: #b91c1c;
-        font-size: 0.9rem;
-    }
-
-    @keyframes slide-in {
-        0% {
-            transform: translateY(-20px);
-            opacity: 0;
-        }
-        100% {
-            transform: translateY(0);
-            opacity: 1;
-        }
-    }
-</style>

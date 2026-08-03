@@ -1,25 +1,32 @@
 <script lang="ts">
-    import {createEventDispatcher} from 'svelte';
+    interface Props {
+        item: any;
+        displayProperty?: string;
+        secondaryProperties?: string[];
+        onclick?: () => void;
+    }
 
-    export let item: any;
-    export let displayProperty: string = 'name';
-    export let secondaryProperties: string[] = [];
+    let {
+        item,
+        displayProperty = 'name',
+        secondaryProperties = [],
+        onclick
+    }: Props = $props();
 
-    // If secondaryProperties aren't provided, try to get some common ones from the item
-    $: actualSecondaryProps = secondaryProperties.length > 0
-        ? secondaryProperties
-        : Object.keys(item).filter(key =>
-            key !== 'id' &&
-            key !== displayProperty &&
-            typeof item[key] !== 'object' &&
-            item[key] !== null &&
-            key !== 'createdAt' &&
-            key !== 'updatedAt');
-
-    const dispatch = createEventDispatcher();
+    const actualSecondaryProps = $derived(
+        secondaryProperties.length > 0
+            ? secondaryProperties
+            : Object.keys(item).filter(key =>
+                key !== 'id' &&
+                key !== displayProperty &&
+                typeof item[key] !== 'object' &&
+                item[key] !== null &&
+                key !== 'createdAt' &&
+                key !== 'updatedAt')
+    );
 
     function handleClick() {
-        dispatch('click');
+        onclick?.();
     }
 
     function formatValue(value: any): string {
@@ -30,82 +37,23 @@
     }
 </script>
 
-<li>
-    <button class="detailed-item-button" on:click={handleClick}>
-        <div class="detailed-item-main">
-            <span class="item-name">{item[displayProperty]}</span>
+<li class="mb-3 font-sans">
+    <button 
+        class="w-full text-left p-4 bg-white border border-border-tan/70 rounded-sm shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer hover:border-primary/80 hover:bg-[#FAF9F6]" 
+        onclick={handleClick}
+    >
+        <div class="flex items-center gap-2 mb-2 font-medium text-[16px] text-charcoal">
+            <span>{item[displayProperty]}</span>
             <slot {item}></slot>
         </div>
 
-        <div class="detailed-item-secondary">
+        <div class="pl-3 border-l-2 border-border-tan ml-1 space-y-1">
             {#each actualSecondaryProps.slice(0, 3) as prop}
-                <div class="property-row">
-                    <span class="property-label">{prop}:</span>
-                    <span class="property-value">{formatValue(item[prop])}</span>
+                <div class="flex text-sm">
+                    <span class="w-[100px] shrink-0 text-slate-brown uppercase font-bold text-xs tracking-wider">{prop}:</span>
+                    <span class="text-charcoal font-medium">{formatValue(item[prop])}</span>
                 </div>
             {/each}
         </div>
     </button>
 </li>
-
-<style>
-    li {
-        margin-bottom: 0.75rem;
-    }
-
-    .detailed-item-button {
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        text-align: left;
-        padding: 0.75rem 1rem;
-        background-color: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    .detailed-item-button:hover {
-        background-color: #f5f5f5;
-        transform: translateY(-2px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-
-    .detailed-item-button:active {
-        transform: translateY(0);
-    }
-
-    .detailed-item-main {
-        display: flex;
-        align-items: center;
-        margin-bottom: 0.5rem;
-    }
-
-    .item-name {
-        font-weight: 600;
-        font-size: 1.1rem;
-    }
-
-    .detailed-item-secondary {
-        padding-left: 0.5rem;
-        border-left: 2px solid #e0e0e0;
-        margin-left: 0.25rem;
-    }
-
-    .property-row {
-        display: flex;
-        font-size: 0.9rem;
-        margin-bottom: 0.25rem;
-    }
-
-    .property-label {
-        color: #666;
-        margin-right: 0.5rem;
-        min-width: 100px;
-    }
-
-    .property-value {
-        color: #333;
-    }
-</style>
