@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  name      String
+  role      String     @default("LANDLORD")
+  tenantId  String?    @unique
+  addressId String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  buildings Building[]
+  address   Address?   @relation(fields: [addressId], references: [id])
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id])
+}
+
+model Address {
+  id          String     @id @default(uuid())
+  street      String
+  houseNumber String
+  city        String
+  postalCode  String
+  state       String?
+  country     String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  buildings   Building[]
+  tenants     Tenant[]
+  users       User[]
+}
+
+model Building {
+  id         String      @id @default(uuid())
+  name       String
+  addressId  String
+  userId     String
+  floors     Int
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  apartments Apartment[]
+  user       User        @relation(fields: [userId], references: [id])
+  address    Address     @relation(fields: [addressId], references: [id])
+  costs      Cost[]
+  meters     Meter[]
+}
+
+model Apartment {
+  id                  String               @id @default(uuid())
+  name                String
+  size                Float
+  sizeUnit            String
+  buildingId          String
+  floor               Int
+  type                String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  building            Building             @relation(fields: [buildingId], references: [id])
+  costs               Cost[]
+  leases              Lease[]
+  maintenanceRequests MaintenanceRequest[]
+  meters              Meter[]
+  payments            Payment[]
+}
+
+model Meter {
+  id          String     @id @default(uuid())
+  type        String
+  value       Float?
+  unit        String
+  costPerUnit Float
+  apartmentId String?
+  buildingId  String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  building    Building?  @relation(fields: [buildingId], references: [id])
+  apartment   Apartment? @relation(fields: [apartmentId], references: [id])
+}
+
+model Cost {
+  id          String     @id @default(uuid())
+  name        String
+  amount      Float
+  currency    String
+  type        String
+  interval    String
+  biller      String
+  occurredAt  DateTime
+  buildingId  String?
+  apartmentId String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  apartment   Apartment? @relation(fields: [apartmentId], references: [id])
+  building    Building?  @relation(fields: [buildingId], references: [id])
+}
+
+model Payment {
+  id          String    @id @default(uuid())
+  amount      Float
+  currency    String
+  dueDate     DateTime
+  status      String
+  type        String
+  apartmentId String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  apartment   Apartment @relation(fields: [apartmentId], references: [id])
+}
+
+model Tenant {
+  id                  String               @id @default(uuid())
+  firstName           String
+  name                String
+  email               String               @unique
+  phoneNumber         String
+  addressId           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  leases              Lease[]
+  maintenanceRequests MaintenanceRequest[]
+  address             Address?             @relation(fields: [addressId], references: [id])
+  user                User?
+}
+
+model Lease {
+  id          String    @id @default(uuid())
+  startDate   DateTime
+  endDate     DateTime?
+  rentAmount  Float
+  currency    String
+  apartmentId String
+  tenantId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  apartment   Apartment @relation(fields: [apartmentId], references: [id])
+}
+
+model MaintenanceRequest {
+  id          String    @id @default(uuid())
+  title       String
+  category    String
+  urgency     String    @default("MEDIUM")
+  description String
+  status      String    @default("PENDING")
+  apartmentId String
+  tenantId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  apartment   Apartment @relation(fields: [apartmentId], references: [id])
+}

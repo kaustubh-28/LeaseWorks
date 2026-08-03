@@ -1,0 +1,23 @@
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.section-spacing {
+  @apply py-8 md:py-12;
+}
+
+.page-container {
+  @apply max-w-[960px] mx-auto px-4 md:px-10 w-full flex-grow flex flex-col py-6;
+}
+
+.content-container {
+  @apply max-w-[800px] mx-auto w-full;
+}

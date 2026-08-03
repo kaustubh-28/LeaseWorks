@@ -1,0 +1,45 @@
+@import "tailwindcss";
+@import "./lib/styles/tokens.css";
+@import "./lib/styles/base.css";
+@import "./lib/styles/components.css";
+@import "./lib/styles/utilities.css";
+
+/* Legacy styling compatibility rules */
+.list-item-button {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    background-color: #fff;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.3s, color 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-radius: 0.42rem;
+}
+
+.list-item-button:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.back-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 24px;
+    color: #333;
+    margin-right: 10px;
+    border-radius: 4px;
+}
+
+.back-button:hover {
+    color: #000;
+    background-color: #dad6d6;
+}
+
+.house-graphic-container {
+    flex-shrink: 0;
+    filter: drop-shadow(3px 5px 2px rgba(0, 0, 0, 0.2));
+    padding: 30px;
+}
