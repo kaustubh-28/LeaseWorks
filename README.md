@@ -75,6 +75,26 @@ The application features a custom double-ledger design identity, drawing inspira
 
 2. Open your browser and navigate to http://localhost:5173.
 
+### Default Credentials
+
+The database seeding script creates the following default accounts for local testing:
+
+#### Landlord Profiles
+* **Landlord One**:
+  * Email: `user123@example.com`
+  * Password: `password1`
+* **Landlord Two**:
+  * Email: `user210@example.com`
+  * Password: `password2`
+
+#### Tenant Profiles
+* **John Tenant**:
+  * Email: `tenant111@example.com`
+  * Password: `password1`
+* **Jane Tenant**:
+  * Email: `tenant210@example.com`
+  * Password: `password2`
+
 ## Roadmap & Upcoming Features
 
 - Tenant Utility Billing: Interactive grids displaying utility costs and water/electricity usage trackers using SVG/CSS chart structures.
